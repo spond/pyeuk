@@ -45,6 +45,22 @@ Dependencies are automatically managed by `setup.py`:
 
 ---
 
+## Benchmark Data & CDC Reference Sub-repository
+
+For testing and benchmarking against official CDC reference genotypes, clone the public CDC reference repository:
+
+```bash
+# Clone the official CDC reference data repository
+git clone https://github.com/Joel-Barratt/Complete-Cyclospora-typing-workflow.git cdc_legacy_ref
+```
+
+The CDC reference dataset contains:
+- `cdc_legacy_ref/.../SPECIMEN_GENOTYPES`: Benchmark clinical specimen genotype calls.
+- `cdc_legacy_ref/.../REFERENCE_POPULATION`: Cohort population background genotypes.
+- `cdc_legacy_ref/.../2018_gold_clusters.txt`: Epidemiological gold standard outbreak cluster reference list.
+
+---
+
 ## Command-Line Interface (CLI) Usage
 
 **PyEuk** installs a unified CLI tool: `cyclospora-typing`.
@@ -55,13 +71,13 @@ cyclospora-typing --help
 ```
 
 ### 1. Execute Complete Outbreak Pipeline (`run-all`)
-Generate the haplotype sheet, compute the distance matrix, and perform Ward hierarchical clustering in a single command:
+Generate the haplotype sheet, compute the distance matrix, and perform Ward hierarchical clustering using CDC test data:
 
 ```bash
 cyclospora-typing run-all \
-    -s ./bench_genotypes/SPECIMEN_GENOTYPES \
-    -b ./bench_genotypes/REFERENCE_POPULATION \
-    -g ./tests/mock_gold.txt \
+    -s cdc_legacy_ref/Complete_Cyclospora_typing_workflow_MacOS_High_Sierra_ALPHA_TEST/HAPLOTYPE_CALLER_CYCLO_V2/SPECIMEN_GENOTYPES \
+    -b cdc_legacy_ref/Complete_Cyclospora_typing_workflow_MacOS_High_Sierra_ALPHA_TEST/HAPLOTYPE_CALLER_CYCLO_V2/REF_SEQS/BLASTING/ORIGINAL_REFS \
+    -g cdc_legacy_ref/Complete_Cyclospora_typing_workflow_MacOS_High_Sierra_ALPHA_TEST/REFERENCE_CLUSTER_LIST/2018_gold_clusters.txt \
     -o ./outbreak_results
 ```
 
@@ -70,8 +86,7 @@ Generate a binary presence/absence MLST haplotype data sheet from specimen BLAST
 
 ```bash
 cyclospora-typing generate-sheet \
-    -s ./bench_genotypes/SPECIMEN_GENOTYPES \
-    -b ./bench_genotypes/REFERENCE_POPULATION \
+    -s cdc_legacy_ref/Complete_Cyclospora_typing_workflow_MacOS_High_Sierra_ALPHA_TEST/HAPLOTYPE_CALLER_CYCLO_V2/SPECIMEN_GENOTYPES \
     -o ./haplotype_data_sheet.txt
 ```
 
@@ -86,12 +101,12 @@ cyclospora-typing eukaryotyping \
 ```
 
 ### 4. Run Outbreak Clustering (`cluster`)
-Perform AGNES Ward hierarchical clustering and threshold calibration:
+Perform AGNES Ward hierarchical clustering and threshold calibration against CDC gold standards:
 
 ```bash
 cyclospora-typing cluster \
     -m ./ensemble_distance_matrix.csv \
-    -g ./tests/mock_gold.txt \
+    -g cdc_legacy_ref/Complete_Cyclospora_typing_workflow_MacOS_High_Sierra_ALPHA_TEST/REFERENCE_CLUSTER_LIST/2018_gold_clusters.txt \
     -o ./clusters_detected
 ```
 
@@ -119,8 +134,7 @@ from cyclospora_pyeuk.clustering import CyclosporaClusterFinder
 
 # 1. Generate haplotype sheet from specimen calls
 sheet_df = generate_haplotype_sheet(
-    specimen_dir="bench_genotypes/SPECIMEN_GENOTYPES",
-    background_dir="bench_genotypes/REFERENCE_POPULATION",
+    specimen_dir="cdc_legacy_ref/Complete_Cyclospora_typing_workflow_MacOS_High_Sierra_ALPHA_TEST/HAPLOTYPE_CALLER_CYCLO_V2/SPECIMEN_GENOTYPES",
     output_path="haplotype_sheet.txt"
 )
 
@@ -133,7 +147,7 @@ wibs_matrix_df = engine.compute_revised_wibs_matrix(clean_df)
 cluster_finder = CyclosporaClusterFinder()
 clusters_df = cluster_finder.find_clusters(
     matrix_df=wibs_matrix_df,
-    gold_standards_path="tests/mock_gold.txt",
+    gold_standards_path="cdc_legacy_ref/Complete_Cyclospora_typing_workflow_MacOS_High_Sierra_ALPHA_TEST/REFERENCE_CLUSTER_LIST/2018_gold_clusters.txt",
     output_dir="clusters_detected"
 )
 ```

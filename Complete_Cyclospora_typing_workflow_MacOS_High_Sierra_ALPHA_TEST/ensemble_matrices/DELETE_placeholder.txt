@@ -1,3 +1,0 @@
-# all ensemble matrices will be printed to this location - delete this placeholder file before running the workflow.
-
-# A test ensemble matrix with the filename "2020-06-27_pairwisedistancematrix_ensemble.csv" can be found in this directory. 

@@ -1,1 +1,0 @@
-# All haplotype sheets will be printed to this directory - delete this file before running the workflow.
