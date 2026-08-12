@@ -1,0 +1,39 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Pytest / Coverage
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Output directories & benchmark caches
+bench_run_output/
+sra_12_trial_output/
+test_ont_sra_output/
+cyclospora_audit_report.*
+*.log
+*.aux
+*.out
+*.toc
+.DS_Store

@@ -1,0 +1,3 @@
+Seq_ID	Cluster_alias
+Sample_A	Vendor_A
+Sample_B	Vendor_A
