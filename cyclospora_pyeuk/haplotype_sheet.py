@@ -1,13 +1,15 @@
 """
 Haplotype Sheet Generator module for CDC Cyclospora cayetanensis workflow.
-Replaces legacy R script START_haplotype_sheet_generator.R.
+Supports folders, raw text files, and compressed ZIP archives (.zip).
 """
 
 import os
 import glob
+import zipfile
+import io
 import datetime
 import pandas as pd
-from typing import List, Optional
+from typing import List, Optional, Dict
 
 
 def generate_haplotype_sheet(
@@ -16,14 +18,14 @@ def generate_haplotype_sheet(
     output_path: Optional[str] = None
 ) -> pd.DataFrame:
     """
-    Parses specimen blast genotype files and produces a binary haplotype matrix dataframe.
+    Parses specimen blast genotype files (from directories or .zip archives) and produces a binary haplotype matrix.
 
     Parameters
     ----------
     specimen_dir : str
-        Directory containing tab-delimited genotype BLAST output files for newly processed specimens.
+        Directory or .zip file containing tab-delimited genotype BLAST output files for newly processed specimens.
     background_dir : Optional[str]
-        Directory containing baseline/reference population genotype BLAST files (e.g. REFERENCE_POPULATION).
+        Directory or .zip file containing baseline/reference population genotype BLAST files.
     output_path : Optional[str]
         Path to save the generated TSV file. If None, saves to haplotype_sheets/YYYY-MM-DD_Cyclospora_haplotype_data_sheet.txt.
 
@@ -32,40 +34,75 @@ def generate_haplotype_sheet(
     pd.DataFrame
         Genotype sheet matrix with Seq_ID as first column and presence marked by "X".
     """
-    file_map = {}
+    file_map: Dict[str, str] = {}
 
-    def collect_files(directory: str):
-        if not directory or not os.path.exists(directory):
+    def collect_source(path: str):
+        if not path or not os.path.exists(path):
             return
-        for fpath in glob.glob(os.path.join(directory, "*")):
-            if os.path.isfile(fpath) and not fpath.endswith(".zip") and not os.path.basename(fpath).startswith("."):
-                seq_id = os.path.basename(fpath)
-                file_map[seq_id] = fpath
 
-    collect_files(specimen_dir)
+        # If path is directly a .zip file
+        if os.path.isfile(path) and path.endswith(".zip"):
+            try:
+                with zipfile.ZipFile(path, 'r') as zf:
+                    for member in zf.namelist():
+                        basename = os.path.basename(member)
+                        if not member.endswith("/") and basename and not basename.startswith(".") and not member.startswith("__MACOSX"):
+                            with zf.open(member) as f:
+                                content = f.read().decode('utf-8', errors='ignore')
+                                file_map[basename] = content
+            except Exception as e:
+                print(f"[HaplotypeSheet Warning] Could not read zip archive {path}: {e}")
+            return
+
+        # If path is a directory
+        if os.path.isdir(path):
+            for root, _, files in os.walk(path):
+                for fname in files:
+                    fpath = os.path.join(root, fname)
+                    if fname.endswith(".zip"):
+                        try:
+                            with zipfile.ZipFile(fpath, 'r') as zf:
+                                for member in zf.namelist():
+                                    basename = os.path.basename(member)
+                                    if not member.endswith("/") and basename and not basename.startswith(".") and not member.startswith("__MACOSX"):
+                                        with zf.open(member) as f:
+                                            content = f.read().decode('utf-8', errors='ignore')
+                                            file_map[basename] = content
+                        except Exception as e:
+                            print(f"[HaplotypeSheet Warning] Could not read zip {fpath}: {e}")
+                    elif not fname.startswith(".") and not fname.endswith(".pdf") and not fname.endswith(".sh"):
+                        try:
+                            with open(fpath, 'r', encoding='utf-8', errors='ignore') as f:
+                                content = f.read()
+                                file_map[fname] = content
+                        except Exception as e:
+                            pass
+
+    collect_source(specimen_dir)
     if background_dir:
-        collect_files(background_dir)
+        collect_source(background_dir)
 
     if not file_map:
-        raise ValueError("No genotype files found in the specified directories.")
+        raise ValueError(f"No genotype files or valid .zip archives found in: {specimen_dir}")
 
     all_markers = set()
     sample_data = {}
 
-    for seq_id, fpath in file_map.items():
-        if os.path.getsize(fpath) == 0:
+    for seq_id, text in file_map.items():
+        text_clean = text.strip()
+        if not text_clean:
             sample_data[seq_id] = set()
             continue
 
         try:
-            df = pd.read_csv(fpath, sep="\t", header=None)
+            df = pd.read_csv(io.StringIO(text_clean), sep="\t", header=None)
             if df.empty or 0 not in df.columns:
                 sample_data[seq_id] = set()
                 continue
             markers = set(df[0].dropna().astype(str).str.strip().tolist())
             sample_data[seq_id] = markers
             all_markers.update(markers)
-        except Exception as e:
+        except Exception:
             sample_data[seq_id] = set()
 
     sorted_markers = sorted(list(all_markers))

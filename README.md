@@ -16,6 +16,7 @@ Re-engineered from the original CDC High Sierra ALPHA release, **PyEuk** replace
 - **KING-Robust Weighted Identity-by-State (wIBS) Distance Engine**: Ingests continuous read-depth allele frequencies across 105 amplicon marker windows, resolving the High-MOI Paradox and preventing multi-strain co-infections from triggering spurious outbreak exclusions.
 - **SoftImpute SVD Matrix Completion**: Imputes missing amplicon dropouts via nuclear norm minimization, eliminating hardcoded magic pseudocounts ($\epsilon = 0.3072$) and ensuring positive semi-definite ($\lambda_{\text{min}} \ge 0.0$) Euclidean metric spaces required for Ward's hierarchical clustering.
 - **Parallel Numba-JIT C-Kernel**: Accelerates distance calculation from **24.6 minutes down to 14.9 seconds** ($99.2\times$ speedup) on standard national surveillance batches ($N = 1,078$).
+- **Native ZIP Archive & Directory Ingestion**: Automatically reads specimen genotype files directly from `.zip` archives (e.g. `SPECIMEN_GENOTYPES.zip`) or raw file folders without manual unzipping.
 - **Oxford Nanopore (ONT) Long-Read Integration**: Direct alignment and haplotype calling for long-read ONT amplicon sequencing data.
 - **100% Deterministic Agglomerative Clustering**: Replaces legacy R's non-deterministic `ties.method="random"` with lexicographical tie-breaking, producing 100% reproducible outbreak cluster dendrograms across runs.
 
@@ -45,19 +46,19 @@ Dependencies are automatically managed by `setup.py`:
 
 ---
 
-## Benchmark Data & CDC Reference Sub-repository
+## Benchmark Data & Automated Test Data Fetcher
 
-For testing and benchmarking against official CDC reference genotypes, clone the public CDC reference repository:
+**PyEuk** includes a built-in automated command to download and unpack official CDC benchmark test datasets directly from the public CDC reference repository:
 
 ```bash
-# Clone the official CDC reference data repository
-git clone https://github.com/Joel-Barratt/Complete-Cyclospora-typing-workflow.git cdc_legacy_ref
+# Fetch and automatically unpack CDC benchmark test dataset
+cyclospora-typing fetch-test-data -o ./cdc_reference_data
 ```
 
-The CDC reference dataset contains:
-- `cdc_legacy_ref/.../SPECIMEN_GENOTYPES`: Benchmark clinical specimen genotype calls.
-- `cdc_legacy_ref/.../REFERENCE_POPULATION`: Cohort population background genotypes.
-- `cdc_legacy_ref/.../2018_gold_clusters.txt`: Epidemiological gold standard outbreak cluster reference list.
+This command automatically:
+1. Clones the official CDC reference data repository (`https://github.com/Joel-Barratt/Complete-Cyclospora-typing-workflow.git`).
+2. Unpacks `SPECIMEN_GENOTYPES.zip` into `./cdc_reference_data/specimens/`.
+3. Sets up the 2018 gold standard outbreak cluster reference list at `./cdc_reference_data/2018_gold_clusters.txt`.
 
 ---
 
@@ -75,18 +76,19 @@ Generate the haplotype sheet, compute the distance matrix, and perform Ward hier
 
 ```bash
 cyclospora-typing run-all \
-    -s cdc_legacy_ref/Complete_Cyclospora_typing_workflow_MacOS_High_Sierra_ALPHA_TEST/HAPLOTYPE_CALLER_CYCLO_V2/SPECIMEN_GENOTYPES \
-    -b cdc_legacy_ref/Complete_Cyclospora_typing_workflow_MacOS_High_Sierra_ALPHA_TEST/HAPLOTYPE_CALLER_CYCLO_V2/REF_SEQS/BLASTING/ORIGINAL_REFS \
-    -g cdc_legacy_ref/Complete_Cyclospora_typing_workflow_MacOS_High_Sierra_ALPHA_TEST/REFERENCE_CLUSTER_LIST/2018_gold_clusters.txt \
+    -s ./cdc_reference_data/specimens \
+    -g ./cdc_reference_data/2018_gold_clusters.txt \
     -o ./outbreak_results
 ```
 
+*(Note: `-s` supports passing `.zip` files directly, e.g., `-s ./cdc_reference_data/cdc_repo/.../SPECIMEN_GENOTYPES.zip`)*
+
 ### 2. Generate Haplotype Data Sheet (`generate-sheet`)
-Generate a binary presence/absence MLST haplotype data sheet from specimen BLAST call files:
+Generate a binary presence/absence MLST haplotype data sheet from specimen BLAST call files or `.zip` archives:
 
 ```bash
 cyclospora-typing generate-sheet \
-    -s cdc_legacy_ref/Complete_Cyclospora_typing_workflow_MacOS_High_Sierra_ALPHA_TEST/HAPLOTYPE_CALLER_CYCLO_V2/SPECIMEN_GENOTYPES \
+    -s ./cdc_reference_data/specimens \
     -o ./haplotype_data_sheet.txt
 ```
 
@@ -106,7 +108,7 @@ Perform AGNES Ward hierarchical clustering and threshold calibration against CDC
 ```bash
 cyclospora-typing cluster \
     -m ./ensemble_distance_matrix.csv \
-    -g cdc_legacy_ref/Complete_Cyclospora_typing_workflow_MacOS_High_Sierra_ALPHA_TEST/REFERENCE_CLUSTER_LIST/2018_gold_clusters.txt \
+    -g ./cdc_reference_data/2018_gold_clusters.txt \
     -o ./clusters_detected
 ```
 
@@ -132,9 +134,9 @@ from cyclospora_pyeuk.haplotype_sheet import generate_haplotype_sheet
 from cyclospora_pyeuk.distance_engine import PyEukDistanceEngine
 from cyclospora_pyeuk.clustering import CyclosporaClusterFinder
 
-# 1. Generate haplotype sheet from specimen calls
+# 1. Generate haplotype sheet directly from directory or .zip archive
 sheet_df = generate_haplotype_sheet(
-    specimen_dir="cdc_legacy_ref/Complete_Cyclospora_typing_workflow_MacOS_High_Sierra_ALPHA_TEST/HAPLOTYPE_CALLER_CYCLO_V2/SPECIMEN_GENOTYPES",
+    specimen_dir="cdc_reference_data/specimens",  # Or "SPECIMEN_GENOTYPES.zip"
     output_path="haplotype_sheet.txt"
 )
 
@@ -147,7 +149,7 @@ wibs_matrix_df = engine.compute_revised_wibs_matrix(clean_df)
 cluster_finder = CyclosporaClusterFinder()
 clusters_df = cluster_finder.find_clusters(
     matrix_df=wibs_matrix_df,
-    gold_standards_path="cdc_legacy_ref/Complete_Cyclospora_typing_workflow_MacOS_High_Sierra_ALPHA_TEST/REFERENCE_CLUSTER_LIST/2018_gold_clusters.txt",
+    gold_standards_path="cdc_reference_data/2018_gold_clusters.txt",
     output_dir="clusters_detected"
 )
 ```
