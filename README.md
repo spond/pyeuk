@@ -1,6 +1,6 @@
 # PyEuk: Modernized *Cyclospora cayetanensis* MLST Genotyping & Outbreak Cluster Finder
 
-[![Version](https://img.shields.io/badge/version-2.0.0-blue.svg)](https://github.com/CDCgov/PyEuk)
+[![Version](https://img.shields.io/badge/version-2.1.0-blue.svg)](https://github.com/spond/pyeuk)
 [![Python](https://img.shields.io/badge/python-3.8%2B-green.svg)](https://www.python.org/)
 [![License](https://img.shields.io/badge/license-Apache%202.0-orange.svg)](LICENSE)
 [![Acceleration](https://img.shields.io/badge/speedup-99.2x-brightgreen.svg)]()
@@ -42,7 +42,6 @@ Dependencies are automatically managed by `setup.py`:
 - `scipy >= 1.7.0`
 - `pandas >= 1.3.0`
 - `scikit-learn >= 1.0.0`
-- `numba >= 0.53.0`
 
 ---
 
@@ -51,42 +50,59 @@ Dependencies are automatically managed by `setup.py`:
 **PyEuk** installs a unified CLI tool: `cyclospora-typing`.
 
 ```bash
-# Print general help and available workflow modes
+# Print general help and available subcommands
 cyclospora-typing --help
 ```
 
-### 1. End-to-End Outbreak Pipeline
-Ingest raw paired FASTQ reads, generate clean haplotype sheets, compute the wIBS distance matrix, and output outbreak cluster assignments:
+### 1. Execute Complete Outbreak Pipeline (`run-all`)
+Generate the haplotype sheet, compute the distance matrix, and perform Ward hierarchical clustering in a single command:
 
 ```bash
-cyclospora-typing run \
-    --fastq-dir /path/to/raw_fastq \
-    --output-dir ./outbreak_results \
-    --threads 8
+cyclospora-typing run-all \
+    -s ./bench_genotypes/SPECIMEN_GENOTYPES \
+    -b ./bench_genotypes/REFERENCE_POPULATION \
+    -g ./tests/mock_gold.txt \
+    -o ./outbreak_results
 ```
 
-### 2. Generate Haplotype Sheet from Existing Specimen Calls
+### 2. Generate Haplotype Data Sheet (`generate-sheet`)
+Generate a binary presence/absence MLST haplotype data sheet from specimen BLAST call files:
+
 ```bash
-cyclospora-typing sheet \
-    --specimen-dir ./bench_genotypes/SPECIMEN_GENOTYPES \
-    --background-dir ./bench_genotypes/REFERENCE_POPULATION \
-    --output ./haplotype_sheet.txt
+cyclospora-typing generate-sheet \
+    -s ./bench_genotypes/SPECIMEN_GENOTYPES \
+    -b ./bench_genotypes/REFERENCE_POPULATION \
+    -o ./haplotype_data_sheet.txt
 ```
 
-### 3. Compute Distance Matrix Only
+### 3. Compute Distance Matrix (`eukaryotyping`)
+Run the distance engine to calculate pairwise genetic dissimilarity across specimens (use `--wibs` for KING-robust weighted IBS):
+
 ```bash
-cyclospora-typing distance \
-    --haplotype-sheet ./haplotype_sheet.txt \
-    --output-matrix ./distance_matrix.csv \
-    --method wibs
+cyclospora-typing eukaryotyping \
+    -i ./haplotype_data_sheet.txt \
+    -o ./ensemble_distance_matrix.csv \
+    --wibs
 ```
 
-### 4. Run Outbreak Clustering & Threshold Calibration
+### 4. Run Outbreak Clustering (`cluster`)
+Perform AGNES Ward hierarchical clustering and threshold calibration:
+
 ```bash
 cyclospora-typing cluster \
-    --distance-matrix ./distance_matrix.csv \
-    --gold-standards ./tests/mock_gold.txt \
-    --output-dir ./clusters_detected
+    -m ./ensemble_distance_matrix.csv \
+    -g ./tests/mock_gold.txt \
+    -o ./clusters_detected
+```
+
+### 5. Process Oxford Nanopore Long-Reads (`process-ont`)
+Process ONT amplicon FASTQ reads directly for long-read MLST haplotype calling:
+
+```bash
+cyclospora-typing process-ont \
+    -i ./sample_ont_reads.fastq \
+    -s SAMPLE_01 \
+    -o ./ont_genotypes
 ```
 
 ---
@@ -99,7 +115,7 @@ cyclospora-typing cluster \
 import pandas as pd
 from cyclospora_pyeuk.haplotype_sheet import generate_haplotype_sheet
 from cyclospora_pyeuk.distance_engine import PyEukDistanceEngine
-from cyclospora_pyeuk.clustering import PyEukClusterFinder
+from cyclospora_pyeuk.clustering import CyclosporaClusterFinder
 
 # 1. Generate haplotype sheet from specimen calls
 sheet_df = generate_haplotype_sheet(
@@ -111,18 +127,15 @@ sheet_df = generate_haplotype_sheet(
 # 2. Compute KING-robust wIBS distance matrix
 engine = PyEukDistanceEngine()
 clean_df = engine.process_haplotype_sheet(sheet_df)
-wibs_matrix_df = engine.compute_wibs_matrix(clean_df)
+wibs_matrix_df = engine.compute_revised_wibs_matrix(clean_df)
 
 # 3. Perform Ward hierarchical clustering and calibrate threshold
-cluster_finder = PyEukClusterFinder()
-linkage_matrix = cluster_finder.build_ward_dendrogram(wibs_matrix_df)
-clusters_df = cluster_finder.predict_clusters(
-    linkage_matrix=linkage_matrix,
-    specimen_ids=wibs_matrix_df.index.tolist(),
-    gold_standards_path="tests/mock_gold.txt"
+cluster_finder = CyclosporaClusterFinder()
+clusters_df = cluster_finder.find_clusters(
+    matrix_df=wibs_matrix_df,
+    gold_standards_path="tests/mock_gold.txt",
+    output_dir="clusters_detected"
 )
-
-print(clusters_df.head())
 ```
 
 ---
