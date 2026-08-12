@@ -31,8 +31,8 @@ Re-engineered from the original CDC High Sierra ALPHA release, **PyEuk** replace
 Clone the repository and install `cyclospora_pyeuk`:
 
 ```bash
-git clone <remote_url>
-cd CDC-Complete-Cyclospora-typing-workflow-ALPHA-TEST
+git clone https://github.com/spond/pyeuk.git
+cd pyeuk
 pip install -e .
 ```
 
