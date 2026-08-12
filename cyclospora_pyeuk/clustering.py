@@ -1,7 +1,7 @@
 """
 CyclosporaClusterFinder: Modernized Python module for AGNES Ward's hierarchical clustering
 and robust outbreak threshold calibration for CDC Cyclospora cayetanensis workflow.
-Supports prospective unsupervised clustering as well as gold-standard supervised calibration.
+Supports prospective unsupervised clustering via Silhouette score optimization and gold-standard supervised calibration.
 """
 
 import os
@@ -10,13 +10,14 @@ import numpy as np
 import pandas as pd
 from scipy.spatial.distance import squareform
 from scipy.cluster.hierarchy import linkage, cut_tree
+from sklearn.metrics import silhouette_score
 from typing import Tuple, Optional, Dict, List
 
 
 class CyclosporaClusterFinder:
     """
     Hierarchical clustering engine for outbreak surveillance, supporting prospective unsupervised
-    clustering and gold-standard supervised calibration.
+    clustering (via Silhouette score maximization) and gold-standard supervised calibration.
     """
 
     def __init__(self, stringency: float = 95.0, robust: bool = True, default_threshold: float = 0.05):
@@ -74,12 +75,12 @@ class CyclosporaClusterFinder:
             med = np.median(within_distances)
             mad = np.median(np.abs(within_distances - med))
             threshold = med + 3.0 * 1.4826 * mad
-            print(f"[ClusterFinder] Robust calibration (Median + 3*MAD): Threshold = {threshold:.5f} (median={med:.5f}, MAD={mad:.5f})")
+            print(f"[ClusterFinder] Supervised calibration (Median + 3*MAD): Threshold = {threshold:.5f} (median={med:.5f}, MAD={mad:.5f})")
         else:
             mean = np.mean(within_distances)
             std = np.std(within_distances, ddof=1) if len(within_distances) > 1 else 0.0
             threshold = mean + 3.0 * std
-            print(f"[ClusterFinder] Classical calibration (Mean + 3*StdDev): Threshold = {threshold:.5f} (mean={mean:.5f}, std={std:.5f})")
+            print(f"[ClusterFinder] Supervised calibration (Mean + 3*StdDev): Threshold = {threshold:.5f} (mean={mean:.5f}, std={std:.5f})")
 
         return float(threshold)
 
@@ -89,11 +90,27 @@ class CyclosporaClusterFinder:
         gold_file_path: Optional[str] = None,
         k_min: int = 1,
         k_max: int = 50,
-        output_dir: Optional[str] = None
+        output_dir: Optional[str] = None,
+        all_input_ids: Optional[List[str]] = None
     ) -> Tuple[pd.DataFrame, int, float]:
         """
         Runs Ward AGNES hierarchical clustering and dynamic tree cut search.
-        Supports prospective unsupervised clustering when gold_file_path is None.
+        Supports prospective unsupervised clustering (Silhouette score optimization) when gold_file_path is None.
+
+        Parameters
+        ----------
+        dist_df : pd.DataFrame
+            Symmetric dissimilarity matrix.
+        gold_file_path : Optional[str]
+            Path to gold standard cluster reference list (optional).
+        k_min : int
+            Minimum cluster count for tree cut search (default: 1).
+        k_max : int
+            Maximum cluster count for tree cut search (default: 50).
+        output_dir : Optional[str]
+            Target directory for cluster output TSV.
+        all_input_ids : Optional[List[str]]
+            List of all original specimen IDs before completeness filtering (for transparent reporting).
 
         Returns
         -------
@@ -113,53 +130,83 @@ class CyclosporaClusterFinder:
         if gold_file_path and os.path.exists(gold_file_path):
             gold_df = pd.read_csv(gold_file_path, sep=r"\s+", engine="python")
             threshold = self.calibrate_gold_standard_threshold(dist_df, gold_df)
-        else:
-            # Prospective unsupervised threshold from distance distribution (15th percentile of non-zero pairwise distances)
-            non_zero_dists = condensed_dist[condensed_dist > 0.0]
-            if len(non_zero_dists) > 0:
-                threshold = float(np.percentile(non_zero_dists, 15.0))
-            else:
-                threshold = self.default_threshold
-            print(f"[ClusterFinder] Prospective Unsupervised Mode: Intra-cluster threshold set to {threshold:.5f}")
+            
+            correct_k = min(k_max, n_samples)
+            best_cluster_df = None
 
-        correct_k = k_max
-        best_cluster_df = None
+            pair_distances = []
+            for i in range(n_samples):
+                for j in range(i + 1, n_samples):
+                    pair_distances.append((i, j, dist_mat[i, j]))
 
-        pair_distances = []
-        for i in range(n_samples):
-            for j in range(i + 1, n_samples):
-                pair_distances.append((i, j, dist_mat[i, j]))
+            for k in range(k_min, min(k_max, n_samples) + 1):
+                cluster_ids = cut_tree(Z, n_clusters=k).ravel()
 
-        for k in range(k_min, min(k_max, n_samples) + 1):
-            cluster_ids = cut_tree(Z, n_clusters=k).ravel()
+                within_total = 0
+                within_below = 0
 
-            within_total = 0
-            within_below = 0
+                for i, j, d in pair_distances:
+                    if cluster_ids[i] == cluster_ids[j]:
+                        within_total += 1
+                        if d <= threshold:
+                            within_below += 1
 
-            for i, j, d in pair_distances:
-                if cluster_ids[i] == cluster_ids[j]:
-                    within_total += 1
-                    if d <= threshold:
-                        within_below += 1
+                pct_meeting = (within_below / within_total * 100.0) if within_total > 0 else 100.0
 
-            pct_meeting = (within_below / within_total * 100.0) if within_total > 0 else 100.0
+                if pct_meeting >= self.stringency:
+                    correct_k = k
+                    best_cluster_df = pd.DataFrame({
+                        "Seq_ID": samples,
+                        "Assigned_cluster": cluster_ids + 1
+                    })
+                    print(f"[ClusterFinder] Optimal supervised cluster count: k = {correct_k} ({pct_meeting:.2f}% pairs meeting threshold).")
+                    break
 
-            if pct_meeting >= self.stringency:
-                correct_k = k
+            if best_cluster_df is None:
+                cluster_ids = cut_tree(Z, n_clusters=min(k_max, n_samples)).ravel()
                 best_cluster_df = pd.DataFrame({
                     "Seq_ID": samples,
                     "Assigned_cluster": cluster_ids + 1
                 })
-                print(f"[ClusterFinder] Optimal cluster count found: {correct_k} clusters ({pct_meeting:.2f}% pairs meeting threshold).")
-                break
+                correct_k = min(k_max, n_samples)
 
-        if best_cluster_df is None:
-            cluster_ids = cut_tree(Z, n_clusters=min(k_max, n_samples)).ravel()
+        else:
+            # Prospective Unsupervised Mode: Optimize Silhouette score over k
+            print("[ClusterFinder] Prospective Unsupervised Mode: Optimizing Silhouette score over tree cuts...")
+            best_k = 2
+            best_sil = -1.0
+
+            search_max = min(k_max, n_samples - 1)
+            for k in range(2, max(3, search_max + 1)):
+                labels = cut_tree(Z, n_clusters=k).ravel()
+                sil = silhouette_score(dist_mat, labels, metric="precomputed")
+                if sil > best_sil:
+                    best_sil = sil
+                    best_k = k
+
+            correct_k = best_k
+            cluster_ids = cut_tree(Z, n_clusters=correct_k).ravel()
+
+            # Estimate threshold as merge height at k
+            heights = Z[:, 2]
+            threshold = float(heights[-(correct_k - 1)]) if len(heights) >= correct_k - 1 else self.default_threshold
+
             best_cluster_df = pd.DataFrame({
                 "Seq_ID": samples,
                 "Assigned_cluster": cluster_ids + 1
             })
-            correct_k = min(k_max, n_samples)
+            print(f"[ClusterFinder] Unsupervised Silhouette Maximization: Optimal k = {correct_k} (Silhouette Score = {best_sil:.4f}, Height Threshold = {threshold:.5f}).")
+
+        # Transparently append low-completeness / excluded specimens if provided
+        if all_input_ids:
+            missing_ids = [sid for sid in all_input_ids if sid not in samples]
+            if missing_ids:
+                missing_df = pd.DataFrame({
+                    "Seq_ID": missing_ids,
+                    "Assigned_cluster": -1  # Cluster -1 indicates Low Completeness / Excluded from distance matrix
+                })
+                best_cluster_df = pd.concat([best_cluster_df, missing_df], ignore_index=True)
+                print(f"[ClusterFinder] Transparent Reporting: {len(missing_ids)} low-completeness specimens explicitly reported as Cluster -1 (Unassigned).")
 
         if output_dir is None:
             output_dir = "clusters_detected"

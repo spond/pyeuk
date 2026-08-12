@@ -32,7 +32,6 @@ def fetch_test_data(target_dir: str = "./cdc_reference_data"):
     specimens_out = os.path.join(target_dir, "specimens")
     os.makedirs(specimens_out, exist_ok=True)
 
-    # Locate SPECIMEN_GENOTYPES.zip or SPECIMEN_GENOTYPES folder
     zip_found = None
     gold_found = None
 
@@ -58,8 +57,8 @@ def fetch_test_data(target_dir: str = "./cdc_reference_data"):
     print("SUCCESS: CDC Benchmark Test Data Ready!")
     print(f"  • Specimen Genotypes Directory : {specimens_out}")
     print(f"  • Gold Standard Clusters File  : {gold_out}")
-    print("\nQuick Run Example:")
-    print(f"  cyclospora-typing run-all -s {specimens_out} -g {gold_out} -o ./outbreak_output")
+    print("\nQuick Run Example (Label-Free Unsupervised):")
+    print(f"  cyclospora-typing run-all -s {specimens_out} -o ./outbreak_output")
     print("==========================================================================\n")
 
 
@@ -94,9 +93,9 @@ def main():
     dist_parser.add_argument("--wibs", action="store_true", help="Compute KING-robust Weighted IBS matrix instead of Barratt ensemble")
 
     # Command 4: cluster
-    cluster_parser = subparsers.add_parser("cluster", help="Run Ward AGNES hierarchical clustering and threshold calibration")
+    cluster_parser = subparsers.add_parser("cluster", help="Run Ward AGNES hierarchical clustering (unsupervised or supervised)")
     cluster_parser.add_argument("-m", "--matrix", required=True, help="Path to ensemble distance matrix CSV")
-    cluster_parser.add_argument("-g", "--gold-clusters", required=True, help="Path to 2018 gold standard cluster reference list")
+    cluster_parser.add_argument("-g", "--gold-clusters", required=False, default=None, help="Optional path to 2018 gold standard cluster reference list (for supervised mode)")
     cluster_parser.add_argument("-o", "--output-dir", default="outbreak_clusters", help="Output directory for resulting clusters")
     cluster_parser.add_argument("-s", "--stringency", type=float, default=95.0, help="Target threshold coverage percentage")
     cluster_parser.add_argument("--robust", action="store_true", default=True, help="Use robust Median + 3*MAD threshold calibration")
@@ -105,7 +104,7 @@ def main():
     runall_parser = subparsers.add_parser("run-all", help="Execute complete pipeline (Sheet Generation -> Distance Matrix -> Clustering)")
     runall_parser.add_argument("-s", "--specimen-dir", required=True, help="Directory or .zip file containing specimen genotype BLAST files")
     runall_parser.add_argument("-b", "--background-dir", help="Directory or .zip file containing background reference genotype files")
-    runall_parser.add_argument("-g", "--gold-clusters", required=True, help="Path to 2018 gold standard cluster reference list")
+    runall_parser.add_argument("-g", "--gold-clusters", required=False, default=None, help="Optional path to 2018 gold standard cluster reference list (for supervised mode)")
     runall_parser.add_argument("-o", "--output-dir", default="cyclospora_output", help="Output directory for all pipeline artifacts")
     runall_parser.add_argument("--preset", choices=["illumina", "ont-r10", "pacbio-hifi"], default="illumina", help="Sequencing technology preset")
     runall_parser.add_argument("--sra-accession", help="Optional SRA accession (e.g. SRR12345678) to fetch raw data directly")
@@ -151,6 +150,7 @@ def main():
 
         print("=== STAGE 1: Generating Haplotype Sheet ===")
         sheet_df = generate_haplotype_sheet(args.specimen_dir, args.background_dir, sheet_path)
+        all_specimens = sheet_df["Seq_ID"].tolist()
 
         print("\n=== STAGE 2: Running PyEuk Distance Engine ===")
         engine = PyEukDistanceEngine()
@@ -163,7 +163,7 @@ def main():
 
         print("\n=== STAGE 3: Outbreak Cluster Determination ===")
         finder = CyclosporaClusterFinder()
-        finder.find_clusters(matrix_df, args.gold_clusters, output_dir=args.output_dir)
+        finder.find_clusters(matrix_df, args.gold_clusters, output_dir=args.output_dir, all_input_ids=all_specimens)
 
         print("\n==================================================")
         print("SUCCESS: Pipeline complete!")
