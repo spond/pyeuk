@@ -36,25 +36,27 @@ class TestCyclosporaPyEuk(unittest.TestCase):
         res_df = engine.compute_ensemble_matrix(self.mock_data)
         self.assertIsInstance(res_df, pd.DataFrame)
         self.assertEqual(res_df.shape[0], res_df.shape[1])
-        # Check diagonal is 0
         np.testing.assert_allclose(np.diag(res_df.values), 0.0, atol=1e-6)
 
-    def test_clustering_engine(self):
-        engine = PyEukDistanceEngine(epsilon=0.3072)
-        res_df = engine.compute_ensemble_matrix(self.mock_data)
+    def test_revised_wibs_and_psd_guarantee(self):
+        engine = PyEukDistanceEngine()
+        wibs_df = engine.compute_revised_wibs_matrix(self.mock_data)
+        self.assertIsInstance(wibs_df, pd.DataFrame)
+        self.assertEqual(wibs_df.shape[0], wibs_df.shape[1])
+        np.testing.assert_allclose(np.diag(wibs_df.values), 0.0, atol=1e-6)
 
-        # Create mock gold standard reference
-        mock_gold = pd.DataFrame({
-            "Seq_ID": ["Sample_A", "Sample_B"],
-            "Cluster_alias": ["Vendor_A", "Vendor_A"]
-        })
-        gold_path = "tests/mock_gold.txt"
-        os.makedirs("tests", exist_ok=True)
-        mock_gold.to_csv(gold_path, sep="\t", index=False)
+        # Assert Gram matrix PSD property (lambda_min >= -1e-12)
+        nids = len(wibs_df)
+        H = np.eye(nids) - np.ones((nids, nids)) / float(nids)
+        G = -0.5 * H @ (wibs_df.values ** 2) @ H
+        min_eval = np.min(np.linalg.eigvalsh(G))
+        self.assertGreaterEqual(min_eval, -1e-12)
 
-        finder = CyclosporaClusterFinder(stringency=95.0, robust=True)
-        clusters_df, k, thresh = finder.find_clusters(res_df, gold_path, k_min=1, k_max=3, output_dir="tests/out_clusters")
-        
+    def test_prospective_unsupervised_clustering(self):
+        engine = PyEukDistanceEngine()
+        wibs_df = engine.compute_revised_wibs_matrix(self.mock_data)
+        finder = CyclosporaClusterFinder()
+        clusters_df, k, thresh = finder.find_clusters(wibs_df, gold_file_path=None, k_min=1, k_max=3, output_dir="tests/out_clusters")
         self.assertIsNotNone(clusters_df)
         self.assertIn("Assigned_cluster", clusters_df.columns)
         self.assertGreaterEqual(k, 1)

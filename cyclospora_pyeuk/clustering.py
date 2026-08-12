@@ -1,7 +1,7 @@
 """
 CyclosporaClusterFinder: Modernized Python module for AGNES Ward's hierarchical clustering
 and robust outbreak threshold calibration for CDC Cyclospora cayetanensis workflow.
-Replaces legacy R scripts cluster_counter.R and CLUSTER_FINDER.R.
+Supports prospective unsupervised clustering as well as gold-standard supervised calibration.
 """
 
 import os
@@ -15,20 +15,24 @@ from typing import Tuple, Optional, Dict, List
 
 class CyclosporaClusterFinder:
     """
-    Hierarchical clustering and outbreak threshold calibration engine.
+    Hierarchical clustering engine for outbreak surveillance, supporting prospective unsupervised
+    clustering and gold-standard supervised calibration.
     """
 
-    def __init__(self, stringency: float = 95.0, robust: bool = True):
+    def __init__(self, stringency: float = 95.0, robust: bool = True, default_threshold: float = 0.05):
         """
         Parameters
         ----------
         stringency : float
-            Percentage of within-cluster distances that must fall below the gold standard threshold (default: 95.0%).
+            Percentage of within-cluster distances that must fall below the distance threshold (default: 95.0%).
         robust : bool
             If True, uses Median + 3 * 1.4826 * MAD for threshold calibration. If False, uses Mean + 3 * StdDev.
+        default_threshold : float
+            Default threshold for prospective unsupervised clustering when gold standards are omitted.
         """
         self.stringency = stringency
         self.robust = robust
+        self.default_threshold = default_threshold
 
     def calibrate_gold_standard_threshold(
         self,
@@ -38,14 +42,12 @@ class CyclosporaClusterFinder:
         """
         Calculates maximum allowed intra-cluster distance threshold using epidemiological gold standards.
         """
-        # Ensure gold_df has Seq_ID and Cluster_alias columns
         gold_df.columns = [c.strip() for c in gold_df.columns]
         if "Seq_ID" not in gold_df.columns:
             gold_df.rename(columns={gold_df.columns[0]: "Seq_ID"}, inplace=True)
         if "Cluster_alias" not in gold_df.columns and len(gold_df.columns) > 1:
             gold_df.rename(columns={gold_df.columns[1]: "Cluster_alias"}, inplace=True)
 
-        # Intersect available samples
         valid_ids = set(dist_df.index) & set(gold_df["Seq_ID"])
         filtered_gold = gold_df[gold_df["Seq_ID"].isin(valid_ids)].copy()
 
@@ -63,8 +65,8 @@ class CyclosporaClusterFinder:
                         within_distances.append(d)
 
         if not within_distances:
-            print("[ClusterFinder] Warning: No overlapping gold standard sample pairs found. Falling back to default threshold (0.15).")
-            return 0.15
+            print(f"[ClusterFinder] Warning: No overlapping gold standard sample pairs found. Using default threshold ({self.default_threshold}).")
+            return self.default_threshold
 
         within_distances = np.array(within_distances)
 
@@ -84,55 +86,60 @@ class CyclosporaClusterFinder:
     def find_clusters(
         self,
         dist_df: pd.DataFrame,
-        gold_file_path: str,
+        gold_file_path: Optional[str] = None,
         k_min: int = 1,
         k_max: int = 50,
         output_dir: Optional[str] = None
     ) -> Tuple[pd.DataFrame, int, float]:
         """
         Runs Ward AGNES hierarchical clustering and dynamic tree cut search.
+        Supports prospective unsupervised clustering when gold_file_path is None.
 
         Returns
         -------
         Tuple[pd.DataFrame, int, float]
-            (Cluster Assignments DataFrame, Correct Number of Clusters, Threshold Used)
+            (Cluster Assignments DataFrame, Number of Clusters, Threshold Used)
         """
-        # Read gold standard clusters file
-        gold_df = pd.read_csv(gold_file_path, sep=r"\s+", engine="python")
-        threshold = self.calibrate_gold_standard_threshold(dist_df, gold_df)
-
         samples = dist_df.index.tolist()
         n_samples = len(samples)
 
-        # Convert distance matrix to condensed vector for linkage
         dist_mat = dist_df.values.copy()
         np.fill_diagonal(dist_mat, 0.0)
         condensed_dist = squareform(dist_mat, checks=False)
 
-        # Ward AGNES hierarchical clustering (scipy.cluster.hierarchy.linkage method='ward')
+        # Ward AGNES hierarchical clustering
         Z = linkage(condensed_dist, method="ward", metric="euclidean")
 
-        # Evaluate cuttree for k in k_min..k_max
+        if gold_file_path and os.path.exists(gold_file_path):
+            gold_df = pd.read_csv(gold_file_path, sep=r"\s+", engine="python")
+            threshold = self.calibrate_gold_standard_threshold(dist_df, gold_df)
+        else:
+            # Prospective unsupervised threshold from distance distribution (15th percentile of non-zero pairwise distances)
+            non_zero_dists = condensed_dist[condensed_dist > 0.0]
+            if len(non_zero_dists) > 0:
+                threshold = float(np.percentile(non_zero_dists, 15.0))
+            else:
+                threshold = self.default_threshold
+            print(f"[ClusterFinder] Prospective Unsupervised Mode: Intra-cluster threshold set to {threshold:.5f}")
+
         correct_k = k_max
         best_cluster_df = None
 
-        # Build pair distance lookup
         pair_distances = []
         for i in range(n_samples):
             for j in range(i + 1, n_samples):
                 pair_distances.append((i, j, dist_mat[i, j]))
 
-        for k in range(k_min, k_max + 1):
+        for k in range(k_min, min(k_max, n_samples) + 1):
             cluster_ids = cut_tree(Z, n_clusters=k).ravel()
-            
-            # Check within-cluster distances meeting threshold
+
             within_total = 0
             within_below = 0
 
             for i, j, d in pair_distances:
                 if cluster_ids[i] == cluster_ids[j]:
                     within_total += 1
-                    if d < threshold:
+                    if d <= threshold:
                         within_below += 1
 
             pct_meeting = (within_below / within_total * 100.0) if within_total > 0 else 100.0
@@ -141,21 +148,19 @@ class CyclosporaClusterFinder:
                 correct_k = k
                 best_cluster_df = pd.DataFrame({
                     "Seq_ID": samples,
-                    "Assigned_cluster": cluster_ids + 1  # 1-indexed cluster IDs
+                    "Assigned_cluster": cluster_ids + 1
                 })
                 print(f"[ClusterFinder] Optimal cluster count found: {correct_k} clusters ({pct_meeting:.2f}% pairs meeting threshold).")
                 break
-            else:
-                print(f"[ClusterFinder] k={k} clusters too small ({pct_meeting:.2f}% < {self.stringency}% meeting threshold).")
 
         if best_cluster_df is None:
-            cluster_ids = cut_tree(Z, n_clusters=k_max).ravel()
+            cluster_ids = cut_tree(Z, n_clusters=min(k_max, n_samples)).ravel()
             best_cluster_df = pd.DataFrame({
                 "Seq_ID": samples,
                 "Assigned_cluster": cluster_ids + 1
             })
+            correct_k = min(k_max, n_samples)
 
-        # Save output
         if output_dir is None:
             output_dir = "clusters_detected"
         os.makedirs(output_dir, exist_ok=True)

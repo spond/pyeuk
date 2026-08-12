@@ -12,6 +12,7 @@ setup(
         "scipy>=1.7.0",
         "pandas>=1.3.0",
         "scikit-learn>=1.0.0",
+        "numba>=0.53.0",
     ],
     entry_points={
         "console_scripts": [
