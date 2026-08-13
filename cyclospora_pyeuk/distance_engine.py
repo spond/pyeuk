@@ -169,6 +169,7 @@ class PyEukDistanceEngine:
 
         # Load de novo sequence map or parse input files if provided
         records = {}
+        fpaths = []
         if sequence_map:
             records.update(sequence_map)
         elif fasta_path and os.path.exists(fasta_path):
@@ -214,6 +215,14 @@ class PyEukDistanceEngine:
             loc = col.split("_Hap_")[0]
             locus_map.setdefault(loc, []).append(col)
 
+        # Calculate KING locus weights based on population marker allele frequencies
+        locus_weights = {}
+        for loc, cols in locus_map.items():
+            sub = (clean_df[cols].values == "X").astype(np.float64)
+            p_j = sub.mean(axis=0)
+            w_j = 1.0 / np.sqrt(np.maximum(p_j * (1.0 - p_j), 1e-6))
+            locus_weights[loc] = float(np.mean(w_j))
+
         dist_mat = np.zeros((nids, nids), dtype=np.float64)
         sample_active = []
         for idx, row in clean_df.iterrows():
@@ -232,12 +241,14 @@ class PyEukDistanceEngine:
                     dist_mat[j, i] = 0.0
                     continue
 
-                locus_scores = []
+                weighted_scores = []
+                weight_sum = 0.0
                 for loc in common_loci:
+                    w_loc = locus_weights[loc]
                     haps_i = sample_active[i][loc]
                     haps_j = sample_active[j][loc]
                     if set(haps_i) & set(haps_j):
-                        locus_scores.append(0.0)
+                        loc_d = 0.0
                     else:
                         min_d = 1.0
                         for hi in haps_i:
@@ -250,9 +261,11 @@ class PyEukDistanceEngine:
                                     d = 1.0
                                 if d < min_d:
                                     min_d = d
-                        locus_scores.append(min_d)
+                        loc_d = min_d
+                    weighted_scores.append(loc_d * w_loc)
+                    weight_sum += w_loc
 
-                mean_dist = float(np.mean(locus_scores)) if locus_scores else 0.0
+                mean_dist = float(sum(weighted_scores) / weight_sum) if weight_sum > 0 else 0.0
                 dist_mat[i, j] = mean_dist
                 dist_mat[j, i] = mean_dist
 
