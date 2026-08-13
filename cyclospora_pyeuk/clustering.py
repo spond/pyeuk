@@ -237,16 +237,18 @@ class CyclosporaClusterFinder:
                 # Find k with maximum merge height drop (dendrogram knee)
                 best_tuple = max(gap_scores, key=lambda x: x[1])
                 max_gap = best_tuple[1]
+                tree_height = float(heights[0]) if len(heights) > 0 else 1.0
+                rel_gap = (max_gap / tree_height) if tree_height > 0 else 0.0
                 
-                # Noise floor check: if max_gap < 0.005, dataset has no distinct cluster separation (k=1)
-                if max_gap < 0.005:
+                # Scale-free noise floor check: if rel_gap < 0.2200, dataset has no distinct cluster separation (k=1)
+                if rel_gap < 0.2200:
                     correct_k = 1
                     threshold = float(heights[0]) if len(heights) > 0 else 0.0
-                    print(f"[ClusterFinder] Dendrogram Merge Height Gap Knee Detection: No distinct cluster separation found (Max Gap = {max_gap:.5f} < 0.005). Assigned k = 1 (Single Outbreak Group).")
+                    print(f"[ClusterFinder] Dendrogram Merge Height Gap Knee Detection: No distinct cluster separation found (Relative Gap = {rel_gap:.4f} < 0.2200). Assigned k = 1 (Single Outbreak Group).")
                 else:
                     correct_k = best_tuple[0]
                     threshold = float((best_tuple[2] + best_tuple[3]) / 2.0)
-                    print(f"[ClusterFinder] Dendrogram Merge Height Gap Knee Detection: Optimal k = {correct_k} (Height Gap = {max_gap:.5f}, Threshold = {threshold:.5f}).")
+                    print(f"[ClusterFinder] Dendrogram Merge Height Gap Knee Detection: Optimal k = {correct_k} (Height Gap = {max_gap:.5f}, Rel Gap = {rel_gap:.4f}, Threshold = {threshold:.5f}).")
             else:
                 correct_k = 2
                 threshold = self.default_threshold
