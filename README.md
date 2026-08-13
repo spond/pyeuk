@@ -213,6 +213,7 @@ To guard against false cluster splitting on background surveillance cohorts or s
 - **Single-Outbreak Null Cohorts (Vendor_A, Vendor_B & Subsamples)**: `min_cluster_size` = 1-4 (< 10% · N) $\rightarrow$ **k = 1 (Correct Single Group across 10/10 null cohorts)**.
 - **Synthetic Shuffled Nulls**: `rel_gap = 0.0695 - 0.0781` (< 0.2200) $\rightarrow$ **k = 1 (Correct Null Detection across 2/2 synthetic nulls)**.
 - **Prospective Detection Floor**: In prospective label-free mode (`cyclospora-typing cluster`), minor outbreak lineages representing < 10% of a surveillance batch (m ≤ 15 out of N ≈ 100) are conservatively reported as k = 1 (Single Outbreak Group) to guarantee 0% false positive cluster splitting on background surveillance cohorts.
+- **Pairwise Micro-Cluster Scanner**: Complementing global tree cuts, `detect_micro_clusters(dist_df)` calculates a scale-free dynamic 1st-percentile dissimilarity threshold (`D ≤ 0.0036`), successfully isolating micro-outbreaks of identical or near-identical profiles ($n \ge 2$) without triggering false global tree splits.
 
 ---
 
