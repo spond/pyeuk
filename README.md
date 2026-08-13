@@ -209,12 +209,12 @@ Jackknife Perturbation Metrics (15 Replicates, 10% Random Drop):
 
 To guard against false cluster splitting on background surveillance cohorts or single-outbreak datasets without fixed matrix scaling assumptions, `PyEuk v2.1.3` normalizes maximum merge height drop by total root tree height (`rel_gap = max_gap / tree_height`):
 
-- **CDC 153 & Galaxy Outbreak Sheets**: `rel_gap = 0.2980 - 0.5299` (≥ 0.2200), `min_cluster_size` = 52-98 (≥ 10% · N) $\rightarrow$ **k = 2 (100% Outbreak Accuracy across 6/6 sheets)**.
-- **Single-Outbreak Null Cohorts (Vendor_A, Vendor_B & Subsamples)**: `min_cluster_size` = 1-4 (< 10% · N) $\rightarrow$ **k = 1 (Correct Single Group across 10/10 null cohorts)**.
-- **Synthetic Shuffled Nulls**: `rel_gap = 0.0695 - 0.0781` (< 0.2200) $\rightarrow$ **k = 1 (Correct Null Detection across 2/2 synthetic nulls)**.
+- **CDC 153 & Galaxy Outbreak Sheets**: `rel_gap = 0.2980 - 0.5299` (≥ 0.2200), `min_cluster_size` = 52-98 (≥ 10% · N) → **k = 2 (100% Outbreak Accuracy across 6/6 sheets)**.
+- **Single-Outbreak Null Cohorts (Vendor_A, Vendor_B & Subsamples)**: `min_cluster_size` = 1-4 (< 10% · N) → **k = 1 (Correct Single Group across 10/10 null cohorts)**.
+- **Synthetic Shuffled Nulls**: `rel_gap = 0.0695 - 0.0781` (< 0.2200) → **k = 1 (Correct Null Detection across 2/2 synthetic nulls)**.
 - **Prospective Detection Floor**: In prospective label-free mode (`cyclospora-typing cluster`), minor outbreak lineages representing < 10% of a surveillance batch (m ≤ 15 out of N ≈ 100) are conservatively reported as k = 1 (Single Outbreak Group) to guarantee 0% false positive cluster splitting on background surveillance cohorts.
-- **Experimental Pairwise Diagnostic Scanner**: `detect_micro_clusters(dist_df)` identifies exact 1-to-1 identical multi-locus genotype profile matches ($D \le 1\text{e-}6$), eliminating single-linkage chaining on background noise ($0$ false positives on synthetic shuffled nulls).
-- **SNP-Weighted KING-Standardized wIBS Engine (`v3.1.0`)**: `compute_snp_weighted_wibs_matrix(df)` combines continuous sequence alignment Hamming distances ($d_{\text{SNP}} = \text{SNPs} / L$) with KING population allele-frequency weights ($w_L = 1 / \sqrt{p_L(1-p_L)}$), passing synthetic shuffled noise nulls ($k=1$) while achieving **100.0% Cluster Precision** across macro-outbreaks ($m = 30$).
+- **Experimental Pairwise Diagnostic Scanner**: `detect_micro_clusters(dist_df)` identifies exact 1-to-1 identical multi-locus genotype profile matches (`D ≤ 1e-6`), eliminating single-linkage chaining on background noise (0 false positives on synthetic shuffled nulls).
+- **SNP-Weighted KING-Standardized wIBS Engine (`v3.1.0`)**: `compute_snp_weighted_wibs_matrix(df)` combines continuous sequence alignment Hamming distances (`d_SNP = SNPs / L`) with KING population allele-frequency weights (`w_L = 1 / sqrt(p_L * (1-p_L))`), passing synthetic shuffled noise nulls (`k = 1`) while achieving **100.0% Cluster Precision** across macro-outbreaks (`m = 30`).
 
 ---
 
@@ -238,34 +238,34 @@ Level 3: Micro-Clusters     Micro-Clusters         Micro-Clusters
          (7 Clone Groups)    (Exact Clones)         (Exact Clones)
 ```
 
-1. **Level 1: Global Bipartition ($k=2$)**:
-   - Cleanly bisects the dataset into `Vendor_A` ($n=99$) and `Vendor_B` ($n=104$) with height gap ratio $\text{rel\_gap} = 0.4069 \ge 0.2200$.
+1. **Level 1: Global Bipartition (`k = 2`)**:
+   - Cleanly bisects the dataset into `Vendor_A` (`n = 99`) and `Vendor_B` (`n = 104`) with height gap ratio `rel_gap = 0.4069 ≥ 0.2200`.
    - **Key Discriminating Mutations**:
      - `Nu_CDS4_PART_B`: Position 21 **`C -> T` transition** (`Hap_2` present in 51.5% of Vendor_A vs 0.0% of Vendor_B).
      - `Nu_CDS1_PART_B`: Position 23 **`T -> C` transition** (`Hap_2` present in 64.6% of Vendor_A vs 0.0% of Vendor_B).
      - `Nu_CDS3_PART_A`: Position 67 **`A -> G` transition** (`Hap_2` present in 48.5% of Vendor_A vs 1.9% of Vendor_B).
 2. **Level 2: Internal Sub-Lineage Hierarchy**:
-   - `Vendor_A` splits into two major balanced sub-lineages ($n=46$ and $n=47$) plus a 6-specimen micro-branch.
+   - `Vendor_A` splits into two major balanced sub-lineages (`n = 46` and `n = 47`) plus a 6-specimen micro-branch.
    - **Vendor_A Sub-Lineage 2 Clonal Expansion Block**:
-     - `Nu_CDS4_PART_B (Position 21 T)`: Present in **93.6% of Sub-Lineage 2** ($44/47$) vs 10.9% of Sub-Lineage 1.
-     - `Nu_CDS4_PART_A (Hap_2)`: Present in **97.9% of Sub-Lineage 2** ($46/47$) vs 34.8% of Sub-Lineage 1.
-     - `Nu_CDS1_PART_B (Position 23 C)`: Present in **91.5% of Sub-Lineage 2** ($43/47$) vs 43.5% of Sub-Lineage 1.
-   - `Vendor_B` consists of a dominant core outbreak strain ($n=91$) and two distinct satellite micro-outbreaks ($n=7$ and $n=6$).
+     - `Nu_CDS4_PART_B (Position 21 T)`: Present in **93.6% of Sub-Lineage 2** (44/47) vs 10.9% of Sub-Lineage 1.
+     - `Nu_CDS4_PART_A (Hap_2)`: Present in **97.9% of Sub-Lineage 2** (46/47) vs 34.8% of Sub-Lineage 1.
+     - `Nu_CDS1_PART_B (Position 23 C)`: Present in **91.5% of Sub-Lineage 2** (43/47) vs 43.5% of Sub-Lineage 1.
+   - `Vendor_B` consists of a dominant core outbreak strain (`n = 91`) and two distinct satellite micro-outbreaks (`n = 7` and `n = 6`).
 3. **Level 3: Micro-Cluster Identical Clone Groups**:
-   - `detect_micro_clusters` isolates byte-identical genotype profile matches ($D \le 1\text{e-}6$), including the 7 exact clone groups in `Vendor_A`.
+   - `detect_micro_clusters` isolates byte-identical genotype profile matches (`D ≤ 1e-6`), including the 7 exact clone groups in `Vendor_A`.
 
 ---
 
 ### 6. Two-Tier Architecture: Macro-Clustering vs. Micro-Traceback
 
-To resolve the trade-off between **macro-outbreak partitioning** and **phylodynamic transmission chain recovery ($A \to B \to C$)**:
+To resolve the trade-off between **macro-outbreak partitioning** and **phylodynamic transmission chain recovery (`A → B → C`)**:
 
 - **Tier 1: Prospective Macro-Outbreak Bipartition (`cyclospora-typing cluster`)**:
   - Uses **Binary KING-Standardized wIBS** (`compute_revised_wibs_matrix()`).
-  - Maximizes diagnostic contrast between major transmission sources (`Vendor_A` vs `Vendor_B`), achieving **$\text{ARI} = 0.9467 - 1.0000$** across all 6 real sheets and **$100\%$ clean null passes ($k=1$)** across 12 surveillance nulls.
+  - Maximizes diagnostic contrast between major transmission sources (`Vendor_A` vs `Vendor_B`), achieving **ARI = 0.9467 - 1.0000** across all 6 real sheets and **100% clean null passes (`k = 1`)** across 12 surveillance nulls.
 - **Tier 2: Micro-Traceback & Phylodynamics (`cyclospora-typing traceback`)**:
-  - Uses **Continuous Sequence Alignment Distance** ($d_{\text{SNP}}$).
-  - Within each identified macro-cluster, constructs a **Directed Minimum Spanning Transmission Graph**, preserving additive evolutionary distances ($d_{\text{SNP}}(A, B) = 1, d_{\text{SNP}}(B, C) = 1 \Rightarrow d_{\text{SNP}}(A, C) = 2$) across the 70 empirical transmission chains present in the CDC dataset.
+  - Uses **Continuous Sequence Alignment Distance** (`d_SNP`).
+  - Within each identified macro-cluster, constructs a **Directed Minimum Spanning Transmission Graph**, preserving additive evolutionary distances (`d_SNP(A, B) = 1, d_SNP(B, C) = 1 ⇒ d_SNP(A, C) = 2`) across the 70 empirical transmission chains present in the CDC dataset.
 
 ---
 
@@ -286,7 +286,7 @@ To resolve the trade-off between **macro-outbreak partitioning** and **phylodyna
 Exhaustive mathematical derivations, population genetics audits, and architectural specifications are available in the `docs/` directory:
 
 1. 📄 [**CDC Legacy Pipeline Audit (`docs/CDC_Legacy_Pipeline_Audit.pdf`)**](docs/cdc_legacy_pipeline_audit.pdf): Complete breakdown of original pipeline mechanics, Barratt's heuristic, Plucinski's Bayesian model, `LLR_10 = -ln(p_k)` proof, and 7 population genetics failure modes.
-2. 📄 [**CDC Modernized Pipeline Architecture (`docs/CDC_Modernized_Pipeline_Architecture.pdf`)**](docs/cdc_modernized_pipeline_architecture.tex): Architectural specification of `PyEuk`, ONT long-read integration, Numba-JIT parallel kernels, Gram matrix PSD projection, and deterministic Ward clustering.
+2. 📄 [**CDC Modernized Pipeline Architecture (`docs/CDC_Modernized_Pipeline_Architecture.pdf`)**](docs/cdc_modernized_pipeline_architecture.pdf): Architectural specification of `PyEuk`, ONT long-read integration, Numba-JIT parallel kernels, Gram matrix PSD projection, and deterministic Ward clustering.
 3. 📄 [**CDC Pipeline Comparative Validation (`docs/CDC_Pipeline_Comparative_Validation.pdf`)**](docs/cdc_pipeline_comparative_validation.pdf): Head-to-head empirical benchmarking report across 1,078 clinical specimens, case studies of agreement vs. disagreement, and spectral eigenvalue proofs.
 
 ---
