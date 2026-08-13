@@ -22,6 +22,20 @@ Re-engineered from the original CDC High Sierra ALPHA release, **PyEuk** replace
 - **Native ZIP Archive & Directory Ingestion**: Automatically reads specimen genotype files directly from `.zip` archives (e.g. `SPECIMEN_GENOTYPES.zip`) or raw file folders without manual unzipping.
 - **100% Deterministic Agglomerative Clustering**: Replaces legacy R's non-deterministic `ties.method="random"` with lexicographical tie-breaking, producing 100% reproducible outbreak cluster dendrograms across runs.
 
+
+---
+
+## Genomic Resources & UCSC BRC-Analytics Integration
+
+***Cyclospora cayetanensis*** reference genome assemblies, gene model annotations, and genomic browser tracks are available through **UCSC GenArk** (Genome Archive) and the **NIAID BRC-Analytics Portal**:
+
+- 🧬 **UCSC BRC-Analytics Pathogen Portal**: [brc-analytics.org](https://brc-analytics.org/) — Interactive pathogen analytics and browser integration funded by NIAID BRC.
+- 🌐 **UCSC Genome Browser / GenArk Assemblies**:
+  - Assembly [`GCA_002893315.1`](https://genome.ucsc.edu/cgi-bin/hgTracks?db=GCA_002893315.1) (*Cyclospora cayetanensis* reference assembly hub)
+  - Assembly [`GCA_002893485.1`](https://genome.ucsc.edu/cgi-bin/hgTracks?db=GCA_002893485.1) (*Cyclospora cayetanensis* CDC reference genome hub)
+
+Public health researchers can visually inspect targeted amplicon loci (`Nu_CDS1`–`Nu_CDS8`, `Nu_360i2`, `Nu_378`, `Mt_MSR`, `Mt_Cmt`) directly against whole-genome reference assemblies, gene models, and structural variation tracks within the UCSC BRC-Analytics genome browser infrastructure.
+
 ---
 
 ## Installation
