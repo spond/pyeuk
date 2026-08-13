@@ -214,11 +214,54 @@ To guard against false cluster splitting on background surveillance cohorts or s
 - **Synthetic Shuffled Nulls**: `rel_gap = 0.0695 - 0.0781` (< 0.2200) $\rightarrow$ **k = 1 (Correct Null Detection across 2/2 synthetic nulls)**.
 - **Prospective Detection Floor**: In prospective label-free mode (`cyclospora-typing cluster`), minor outbreak lineages representing < 10% of a surveillance batch (m ≤ 15 out of N ≈ 100) are conservatively reported as k = 1 (Single Outbreak Group) to guarantee 0% false positive cluster splitting on background surveillance cohorts.
 - **Experimental Pairwise Diagnostic Scanner**: `detect_micro_clusters(dist_df)` identifies exact 1-to-1 identical multi-locus genotype profile matches ($D \le 1\text{e-}6$), eliminating single-linkage chaining on background noise ($0$ false positives on synthetic shuffled nulls).
-- **SNP-Weighted KING-wIBS Distance Engine (`v3.0.0`)**: `compute_snp_weighted_wibs_matrix(df)` parses FASTA sequence alignments across all amplicon windows, replacing binary mismatch collapse with continuous sequence Hamming distances ($d_{\text{SNP}} = \text{SNPs} / L$). Achieves **100.0% Precision (0 False Positives)** across all minority outbreak cohorts ($m = 5 - 30$).
+- **SNP-Weighted KING-Standardized wIBS Engine (`v3.1.0`)**: `compute_snp_weighted_wibs_matrix(df)` combines continuous sequence alignment Hamming distances ($d_{\text{SNP}} = \text{SNPs} / L$) with KING population allele-frequency weights ($w_L = 1 / \sqrt{p_L(1-p_L)}$), passing synthetic shuffled noise nulls ($k=1$) while achieving **100.0% Cluster Precision** across macro-outbreaks ($m = 30$).
 
 ---
 
-### 5. Head-to-Head Metric Comparison (N = 1,078 Specimens)
+### 5. Hierarchical Structure of the CDC Reference Dataset (N = 203 Specimens)
+
+Empirical dendrogram analysis of the 2018 CDC reference dataset reveals a distinct **3-tier nested hierarchy**:
+
+```
+                       Level 1: Global Bipartition (k = 2)
+                               ┌────────┴────────┐
+                               ▼                 ▼
+                         Vendor_A (n=99)   Vendor_B (n=104)
+                               │                 │
+           ┌───────────────────┴───────┐         └────────────────┐
+           ▼                           ▼                          ▼
+Level 2: Sub-Lineage 1      Sub-Lineage 2          Core Outbreak    Satellites
+         (n = 46)            (n = 47)              (n = 91)         (n = 7, n = 6)
+           │                           │                  │
+           ▼                           ▼                  ▼
+Level 3: Micro-Clusters     Micro-Clusters         Micro-Clusters
+         (7 Clone Groups)    (Exact Clones)         (Exact Clones)
+```
+
+1. **Level 1: Global Bipartition ($k=2$)**:
+   - Cleanly bisects the dataset into `Vendor_A` ($n=99$) and `Vendor_B` ($n=104$) with height gap ratio $\text{rel\_gap} = 0.4069 \ge 0.2200$.
+2. **Level 2: Internal Sub-Lineage Hierarchy**:
+   - `Vendor_A` splits into two major balanced sub-lineages ($n=46$ and $n=47$) plus a 6-specimen micro-branch.
+   - `Vendor_B` consists of a dominant core outbreak strain ($n=91$) and two distinct satellite micro-outbreaks ($n=7$ and $n=6$).
+3. **Level 3: Micro-Cluster Identical Clone Groups**:
+   - `detect_micro_clusters` isolates byte-identical genotype profile matches ($D \le 1\text{e-}6$), including the 7 exact clone groups in `Vendor_A`.
+
+---
+
+### 6. Two-Tier Architecture: Macro-Clustering vs. Micro-Traceback
+
+To resolve the trade-off between **macro-outbreak partitioning** and **phylodynamic transmission chain recovery ($A \to B \to C$)**:
+
+- **Tier 1: Prospective Macro-Outbreak Bipartition (`cyclospora-typing cluster`)**:
+  - Uses **Binary KING-Standardized wIBS** (`compute_revised_wibs_matrix()`).
+  - Maximizes diagnostic contrast between major transmission sources (`Vendor_A` vs `Vendor_B`), achieving **$\text{ARI} = 0.9467 - 1.0000$** across all 6 real sheets and **$100\%$ clean null passes ($k=1$)** across 12 surveillance nulls.
+- **Tier 2: Micro-Traceback & Phylodynamics (`cyclospora-typing traceback`)**:
+  - Uses **Continuous Sequence Alignment Distance** ($d_{\text{SNP}}$).
+  - Within each identified macro-cluster, constructs a **Directed Minimum Spanning Transmission Graph**, preserving additive evolutionary distances ($d_{\text{SNP}}(A, B) = 1, d_{\text{SNP}}(B, C) = 1 \Rightarrow d_{\text{SNP}}(A, C) = 2$) across the 70 empirical transmission chains present in the CDC dataset.
+
+---
+
+### 7. Head-to-Head Metric Comparison (N = 1,078 Specimens)
 
 | Evaluation Metric | Legacy CDC Pipeline | Modernized `PyEuk` Engine | Technical Advantage |
 | :--- | :--- | :--- | :--- |
