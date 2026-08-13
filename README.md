@@ -240,10 +240,20 @@ Level 3: Micro-Clusters     Micro-Clusters         Micro-Clusters
 
 1. **Level 1: Global Bipartition (`k = 2`)**:
    - Cleanly bisects the dataset into `Vendor_A` (`n = 99`) and `Vendor_B` (`n = 104`) with height gap ratio `rel_gap = 0.4069 ≥ 0.2200`.
-   - **Key Discriminating Mutations**:
-     - `Nu_CDS4_PART_B`: Position 21 **`C -> T` transition** (`Hap_2` present in 51.5% of Vendor_A vs 0.0% of Vendor_B).
-     - `Nu_CDS1_PART_B`: Position 23 **`T -> C` transition** (`Hap_2` present in 64.6% of Vendor_A vs 0.0% of Vendor_B).
-     - `Nu_CDS3_PART_A`: Position 67 **`A -> G` transition** (`Hap_2` present in 48.5% of Vendor_A vs 1.9% of Vendor_B).
+
+   **Explicit Dropout-Aware Marker Divergence Table**:
+
+| Amplicon Locus Marker | Vendor_A Calls / Amplified [PCR Dropouts] | Vendor_B Calls / Amplified [PCR Dropouts] | Amplified Specimen Prevalence | Diagnostic Exclusion |
+| :--- | :---: | :---: | :---: | :---: |
+| **`Nu_CDS1_PART_A_Hap_2`** | **57 / 57** [drop 42] | **0 / 71** [drop 33] | **100.0% in A vs. 0.0% in B** | **100.0% Perfect Exclusion** |
+| **`Nu_CDS1_PART_B_Hap_2`** | **64 / 64** [drop 35] | **0 / 74** [drop 30] | **100.0% in A vs. 0.0% in B** | **100.0% Perfect Exclusion** |
+| **`Nu_CDS4_PART_A_Hap_2`** | **65 / 65** [drop 34] | **0 / 49** [drop 55] | **100.0% in A vs. 0.0% in B** | **100.0% Perfect Exclusion** |
+| **`Nu_CDS4_PART_B_Hap_2`** | **51 / 51** [drop 48] | **0 / 31** [drop 73] | **100.0% in A vs. 0.0% in B** | **100.0% Perfect Exclusion** |
+| **`Nu_378_PART_D_Hap_7`** | **85 / 92** [drop 7] | **0 / 101** [drop 3] | **92.4% in A vs. 0.0% in B** | **92.4% Lineage Marker** |
+| **`Nu_378_PART_D_Hap_2`** | **0 / 92** [drop 7] | **94 / 101** [drop 3] | **0.0% in A vs. 93.1% in B** | **93.1% Lineage Marker** |
+| **`Mt_Cmt169.A_Junction_Hap_8`** | **0 / 0** [drop 99] | **75 / 75** [drop 29] | **0.0% in A vs. 100.0% in B** | **100.0% Perfect Exclusion** |
+| **`Mt_Cmt199.A_Junction_Hap_17`** | **62 / 62** [drop 37] | **0 / 0** [drop 104] | **100.0% in A vs. 0.0% in B** | **100.0% Perfect Exclusion** |
+
 2. **Level 2: Internal Sub-Lineage Hierarchy**:
    - `Vendor_A` splits into two major balanced sub-lineages (`n = 46` and `n = 47`) plus a 6-specimen micro-branch.
    - **Vendor_A Sub-Lineage 2 Clonal Expansion Block**:

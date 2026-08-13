@@ -426,7 +426,6 @@ Candidate $k=2$ cuts the dataset into clusters of size $C_1=6$ and $C_2=4$. Mini
 ---
 
 \section{Hierarchical Structure of the CDC Reference Dataset}
-
 \subsection{Empirical 3-Tier Nested Hierarchy}
 
 Dendrogram analysis of the 2018 CDC reference dataset ($N=203$ specimens) reveals a distinct **3-tier nested hierarchy**:
@@ -434,9 +433,13 @@ Dendrogram analysis of the 2018 CDC reference dataset ($N=203$ specimens) reveal
 \begin{enumerate}
     \item \textbf{Level 1: Global Bipartition ($k=2$):} Bisects the dataset into \texttt{Vendor\_A} ($n=99$) and \texttt{Vendor\_B} ($n=104$) with relative gap ratio $\text{rel\_gap} = 0.4069 \ge 0.2200$.
     \begin{itemize}
-        \item \texttt{Nu\_CDS4\_PART\_B}: Position 21 \textbf{C $\to$ T transition} (\texttt{Hap\_2} present in 51.5\% of \texttt{Vendor\_A} vs 0.0\% of \texttt{Vendor\_B}).
-        \item \texttt{Nu\_CDS1\_PART\_B}: Position 23 \textbf{T $\to$ C transition} (\texttt{Hap\_2} present in 64.6\% of \texttt{Vendor\_A} vs 0.0\% of \texttt{Vendor\_B}).
-        \item \texttt{Nu\_CDS3\_PART\_A}: Position 67 \textbf{A $\to$ G transition} (\texttt{Hap\_2} present in 48.5\% of \texttt{Vendor\_A} vs 1.9\% of \texttt{Vendor\_B}).
+        \item Accounting for PCR amplicon dropouts reveals **100.0\% perfect diagnostic exclusion among amplified specimens**:
+        \begin{itemize}
+            \item \texttt{Nu\_CDS1\_PART\_A\_Hap\_2}: 57/57 amplified (drop 42) in A (\textbf{100.0\%}) vs 0/71 (drop 33) in B (\textbf{0.0\%}).
+            \item \texttt{Nu\_CDS1\_PART\_B\_Hap\_2}: 64/64 amplified (drop 35) in A (\textbf{100.0\%}) vs 0/74 (drop 30) in B (\textbf{0.0\%}).
+            \item \texttt{Nu\_CDS4\_PART\_A\_Hap\_2}: 65/65 amplified (drop 34) in A (\textbf{100.0\%}) vs 0/49 (drop 55) in B (\textbf{0.0\%}).
+            \item \texttt{Nu\_CDS4\_PART\_B\_Hap\_2}: 51/51 amplified (drop 48) in A (\textbf{100.0\%}) vs 0/31 (drop 73) in B (\textbf{0.0\%}).
+        \end{itemize}
     \end{itemize}
     \item \textbf{Level 2: Internal Sub-Lineage Hierarchy:}
     \begin{itemize}
