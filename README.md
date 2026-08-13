@@ -218,24 +218,32 @@ To guard against false cluster splitting on background surveillance cohorts or s
 
 ---
 
-### 5. Hierarchical Structure of the CDC Reference Dataset (N = 203 Specimens)
+### 5. Hierarchical Structure & Mutation Map of the CDC Reference Dataset (N = 203 Specimens)
 
-Empirical dendrogram analysis of the 2018 CDC reference dataset reveals a distinct **3-tier nested hierarchy**:
+Empirical dendrogram analysis of the 2018 CDC reference dataset reveals a distinct **3-tier nested hierarchy** with branch-specific mutational blocks:
 
 ```
-                       Level 1: Global Bipartition (k = 2)
-                               ┌────────┴────────┐
-                               ▼                 ▼
-                         Vendor_A (n=99)   Vendor_B (n=104)
-                               │                 │
-           ┌───────────────────┴───────┐         └────────────────┐
-           ▼                           ▼                          ▼
-Level 2: Sub-Lineage 1      Sub-Lineage 2          Core Outbreak    Satellites
-         (n = 46)            (n = 47)              (n = 91)         (n = 7, n = 6)
-           │                           │                  │
-           ▼                           ▼                  ▼
-Level 3: Micro-Clusters     Micro-Clusters         Micro-Clusters
-         (7 Clone Groups)    (Exact Clones)         (Exact Clones)
+                               Level 1: Global Outbreak Bipartition (k = 2)
+                                              │
+                   ┌──────────────────────────┴──────────────────────────┐
+                   │ [Nu_378_D Hap 7 (92.4%)]                            │ [Nu_378_D Hap 2 (93.1%)]
+                   │ [Nu_CDS1_A Pos 23 C (100%)]                         │ [Nu_CDS1_A Pos 23 T (100%)]
+                   │ [Nu_CDS1_B Pos 23 C (100%)]                         │ [Nu_CDS1_B Pos 23 T (100%)]
+                   │ [Nu_CDS4_A Hap 2 (100%)]                            │ [Nu_CDS4_A Hap 1 (100%)]
+                   │ [Nu_CDS4_B Pos 21 T (100%)]                         │ [Nu_CDS4_B Pos 21 C (100%)]
+                   ▼                                                     ▼
+             Vendor_A (n = 99)                                     Vendor_B (n = 104)
+                   │                                                     │
+       ┌───────────┴───────────┐                             ┌───────────┴───────────┐
+       │ Ancestral Branch      │ [Nu_CDS4_B Pos 21 T (93.6%)] │ Core Outbreak Lineage │ Satellite Outbreaks
+       │                       │ [Nu_CDS4_A Hap 2    (97.9%)]│                       │
+       ▼                       ▼                             ▼                       ▼
+Level 2: Sub-Lineage 1    Sub-Lineage 2                Core Outbreak          Satellites
+         (n = 46)          (n = 47)                    (n = 91)               (n = 7, n = 6)
+       │                       │                             │
+       ▼                       ▼                             ▼
+Level 3: Micro-Clusters   Micro-Clusters               Micro-Clusters
+         (7 Clone Groups)  (Exact Clones)               (Exact Clones)
 ```
 
 1. **Level 1: Global Bipartition (`k = 2`)**:
