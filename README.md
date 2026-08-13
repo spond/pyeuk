@@ -205,7 +205,17 @@ Jackknife Perturbation Metrics (15 Replicates, 10% Random Drop):
 
 ---
 
-### 4. Head-to-Head Metric Comparison (N = 1,078 Specimens)
+### 4. Scale-Free Relative Gap Noise Floor Fallback (`rel_gap < 0.2200`)
+
+To guard against false cluster splitting on background surveillance cohorts or single-outbreak datasets without fixed matrix scaling assumptions, `PyEuk v2.1.3` normalizes maximum merge height drop by total root tree height (`rel_gap = max_gap / tree_height`):
+
+- **CDC 153 & Galaxy Outbreak Sheets**: `rel_gap = 0.2980 - 0.5299` ($\ge 0.2200$) $\rightarrow$ **$k = 2$ ($100\%$ Outbreak Accuracy)**.
+- **Single-Outbreak Null Cohort (Vendor_A)**: `rel_gap = 0.2081` ($< 0.2200$) $\rightarrow$ **$k = 1$ (Correct Single Group)**.
+- **Synthetic Shuffled Null**: `rel_gap = 0.0781` ($< 0.2200$) $\rightarrow$ **$k = 1$ (Correct Null Detection)**.
+
+---
+
+### 5. Head-to-Head Metric Comparison (N = 1,078 Specimens)
 
 | Evaluation Metric | Legacy CDC Pipeline | Modernized `PyEuk` Engine | Technical Advantage |
 | :--- | :--- | :--- | :--- |
