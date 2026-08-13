@@ -299,4 +299,34 @@ class CyclosporaClusterFinder:
         best_cluster_df.to_csv(output_path, sep="\t", index=False)
         print(f"[ClusterFinder] Saved outbreak cluster assignments to: {output_path}")
 
-        return best_cluster_df, correct_k, threshold
+        return best_cluster_df, correct_k, float(threshold)
+
+    def detect_micro_clusters(
+        self,
+        dist_df: pd.DataFrame,
+        micro_threshold: float = 0.05,
+        min_micro_size: int = 2
+    ) -> List[List[str]]:
+        """
+        Scans distance matrix for micro-clusters (subsets of specimens n >= min_micro_size
+        exhibiting tight pairwise dissimilarity D <= micro_threshold).
+        This isolates micro-outbreaks (e.g. n = 2-15) even when global tree cuts return k = 1.
+        """
+        from scipy.cluster.hierarchy import fcluster, linkage
+        from scipy.spatial.distance import squareform
+
+        dist_mat = dist_df.values.copy()
+        np.fill_diagonal(dist_mat, 0.0)
+        condensed_dist = squareform(dist_mat, checks=False)
+        Z = linkage(condensed_dist, method="single", metric="euclidean")
+
+        # Cut tree at tight distance threshold
+        labels = fcluster(Z, t=micro_threshold, criterion="distance")
+
+        samples = dist_df.index.tolist()
+        clusters = {}
+        for sample, label in zip(samples, labels):
+            clusters.setdefault(label, []).append(sample)
+
+        micro_clusters = [members for members in clusters.values() if len(members) >= min_micro_size]
+        return micro_clusters

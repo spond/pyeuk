@@ -61,6 +61,14 @@ class TestCyclosporaPyEuk(unittest.TestCase):
         self.assertIn("Assigned_cluster", clusters_df.columns)
         self.assertGreaterEqual(k, 1)
 
+    def test_micro_cluster_detection(self):
+        engine = PyEukDistanceEngine()
+        wibs_df = engine.compute_revised_wibs_matrix(self.mock_data)
+        finder = CyclosporaClusterFinder()
+        micro_clusters = finder.detect_micro_clusters(wibs_df, micro_threshold=0.10, min_micro_size=2)
+        self.assertIsInstance(micro_clusters, list)
+
 
 if __name__ == "__main__":
     unittest.main()
+
