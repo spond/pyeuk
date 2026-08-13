@@ -1,7 +1,8 @@
 """
 CyclosporaClusterFinder: Modernized Python module for AGNES Ward's hierarchical clustering
 and robust outbreak threshold calibration for CDC Cyclospora cayetanensis workflow.
-Supports prospective unsupervised clustering via Silhouette score optimization and gold-standard supervised calibration.
+Supports prospective unsupervised clustering via Dendrogram Merge Height Gap Knee Detection
+and gold-standard supervised calibration.
 """
 
 import os
@@ -10,14 +11,14 @@ import numpy as np
 import pandas as pd
 from scipy.spatial.distance import squareform
 from scipy.cluster.hierarchy import linkage, cut_tree
-from sklearn.metrics import silhouette_score
+from sklearn.metrics import roc_auc_score
 from typing import Tuple, Optional, Dict, List
 
 
 class CyclosporaClusterFinder:
     """
     Hierarchical clustering engine for outbreak surveillance, supporting prospective unsupervised
-    clustering (via Silhouette score maximization) and gold-standard supervised calibration.
+    clustering (via Dendrogram Merge Height Gap Knee Detection) and gold-standard supervised calibration.
     """
 
     def __init__(self, stringency: float = 95.0, robust: bool = True, default_threshold: float = 0.05):
@@ -34,6 +35,44 @@ class CyclosporaClusterFinder:
         self.stringency = stringency
         self.robust = robust
         self.default_threshold = default_threshold
+
+    @staticmethod
+    def compute_distance_auc(dist_df: pd.DataFrame, gold_df: pd.DataFrame) -> float:
+        """
+        Computes ROC AUC of raw pairwise distances at separating same-outbreak vs different-outbreak sample pairs.
+        This provides a pure, label-free diagnostic of distance metric discriminative quality without clustering dependencies.
+        """
+        gold_df = gold_df.copy()
+        gold_df.columns = [c.strip() for c in gold_df.columns]
+        if "Seq_ID" not in gold_df.columns:
+            gold_df.rename(columns={gold_df.columns[0]: "Seq_ID"}, inplace=True)
+        if "Cluster_alias" not in gold_df.columns and len(gold_df.columns) > 1:
+            gold_df.rename(columns={gold_df.columns[1]: "Cluster_alias"}, inplace=True)
+
+        valid_ids = list(set(dist_df.index) & set(gold_df["Seq_ID"]))
+        if len(valid_ids) < 2:
+            return 0.5
+
+        label_map = dict(zip(gold_df["Seq_ID"], gold_df["Cluster_alias"]))
+        
+        y_true = [] # 1 if same outbreak cluster, 0 if different
+        y_score = [] # -distance (smaller distance = higher probability of same cluster)
+
+        for i in range(len(valid_ids)):
+            for j in range(i + 1, len(valid_ids)):
+                id1, id2 = valid_ids[i], valid_ids[j]
+                d = dist_df.loc[id1, id2]
+                if not np.isnan(d):
+                    same_cluster = 1 if label_map[id1] == label_map[id2] else 0
+                    y_true.append(same_cluster)
+                    y_score.append(-d)
+
+        if len(set(y_true)) < 2:
+            return 0.5
+
+        auc = float(roc_auc_score(y_true, y_score))
+        print(f"[DistanceEngine AUC] Pairwise Distance ROC AUC = {auc:.4f} ({len(y_true)} sample pairs)")
+        return auc
 
     def calibrate_gold_standard_threshold(
         self,
@@ -88,14 +127,14 @@ class CyclosporaClusterFinder:
         self,
         dist_df: pd.DataFrame,
         gold_file_path: Optional[str] = None,
-        k_min: int = 1,
+        k_min: int = 2,
         k_max: int = 50,
         output_dir: Optional[str] = None,
         all_input_ids: Optional[List[str]] = None
     ) -> Tuple[pd.DataFrame, int, float]:
         """
         Runs Ward AGNES hierarchical clustering and dynamic tree cut search.
-        Supports prospective unsupervised clustering (Silhouette score optimization) when gold_file_path is None.
+        Supports prospective unsupervised clustering (Dendrogram Merge Height Gap Knee Detection) when gold_file_path is None.
 
         Parameters
         ----------
@@ -104,7 +143,7 @@ class CyclosporaClusterFinder:
         gold_file_path : Optional[str]
             Path to gold standard cluster reference list (optional).
         k_min : int
-            Minimum cluster count for tree cut search (default: 1).
+            Minimum cluster count for tree cut search (default: 2 to guard against k=1 single-cluster collapse).
         k_max : int
             Maximum cluster count for tree cut search (default: 50).
         output_dir : Optional[str]
@@ -120,6 +159,10 @@ class CyclosporaClusterFinder:
         samples = dist_df.index.tolist()
         n_samples = len(samples)
 
+        if n_samples < 2:
+            single_df = pd.DataFrame({"Seq_ID": samples, "Assigned_cluster": [1]})
+            return single_df, 1, 0.0
+
         dist_mat = dist_df.values.copy()
         np.fill_diagonal(dist_mat, 0.0)
         condensed_dist = squareform(dist_mat, checks=False)
@@ -129,6 +172,7 @@ class CyclosporaClusterFinder:
 
         if gold_file_path and os.path.exists(gold_file_path):
             gold_df = pd.read_csv(gold_file_path, sep=r"\s+", engine="python")
+            self.compute_distance_auc(dist_df, gold_df)
             threshold = self.calibrate_gold_standard_threshold(dist_df, gold_df)
             
             correct_k = min(k_max, n_samples)
@@ -139,7 +183,9 @@ class CyclosporaClusterFinder:
                 for j in range(i + 1, n_samples):
                     pair_distances.append((i, j, dist_mat[i, j]))
 
-            for k in range(k_min, min(k_max, n_samples) + 1):
+            # Guard: Require k >= max(2, k_min) to avoid single-cluster k=1 collapse
+            search_start = max(2, k_min)
+            for k in range(search_start, min(k_max, n_samples) + 1):
                 cluster_ids = cut_tree(Z, n_clusters=k).ravel()
 
                 within_total = 0
@@ -163,39 +209,46 @@ class CyclosporaClusterFinder:
                     break
 
             if best_cluster_df is None:
-                cluster_ids = cut_tree(Z, n_clusters=min(k_max, n_samples)).ravel()
+                cluster_ids = cut_tree(Z, n_clusters=max(2, min(k_max, n_samples))).ravel()
                 best_cluster_df = pd.DataFrame({
                     "Seq_ID": samples,
                     "Assigned_cluster": cluster_ids + 1
                 })
-                correct_k = min(k_max, n_samples)
+                correct_k = len(set(cluster_ids))
 
         else:
-            # Prospective Unsupervised Mode: Optimize Silhouette score over k
-            print("[ClusterFinder] Prospective Unsupervised Mode: Optimizing Silhouette score over tree cuts...")
-            best_k = 2
-            best_sil = -1.0
+            # Prospective Unsupervised Mode: Dendrogram Merge Height Gap Knee Detection (Elbow Rule)
+            print("[ClusterFinder] Prospective Unsupervised Mode: Evaluating dendrogram merge height gap knee...")
+            
+            # Z[:, 2] contains merge heights in ascending order (last merge is 2 -> 1 cluster)
+            heights = Z[::-1, 2] # Descending order: heights[0] is merge 2 -> 1, heights[1] is merge 3 -> 2, etc.
+            
+            search_limit = min(k_max, len(heights))
+            gap_scores = []
 
-            search_max = min(k_max, n_samples - 1)
-            for k in range(2, max(3, search_max + 1)):
-                labels = cut_tree(Z, n_clusters=k).ravel()
-                sil = silhouette_score(dist_mat, labels, metric="precomputed")
-                if sil > best_sil:
-                    best_sil = sil
-                    best_k = k
+            for idx in range(search_limit - 1):
+                k = idx + 2 # k clusters
+                h_curr = heights[idx]
+                h_next = heights[idx + 1]
+                gap = h_curr - h_next
+                gap_scores.append((k, gap, h_curr, h_next))
 
-            correct_k = best_k
+            if gap_scores:
+                # Find k with maximum merge height drop (dendrogram knee)
+                best_tuple = max(gap_scores, key=lambda x: x[1])
+                correct_k = best_tuple[0]
+                max_gap = best_tuple[1]
+                threshold = float((best_tuple[2] + best_tuple[3]) / 2.0)
+                print(f"[ClusterFinder] Dendrogram Merge Height Gap Knee Detection: Optimal k = {correct_k} (Height Gap = {max_gap:.5f}, Threshold = {threshold:.5f}).")
+            else:
+                correct_k = 2
+                threshold = self.default_threshold
+
             cluster_ids = cut_tree(Z, n_clusters=correct_k).ravel()
-
-            # Estimate threshold as merge height at k
-            heights = Z[:, 2]
-            threshold = float(heights[-(correct_k - 1)]) if len(heights) >= correct_k - 1 else self.default_threshold
-
             best_cluster_df = pd.DataFrame({
                 "Seq_ID": samples,
                 "Assigned_cluster": cluster_ids + 1
             })
-            print(f"[ClusterFinder] Unsupervised Silhouette Maximization: Optimal k = {correct_k} (Silhouette Score = {best_sil:.4f}, Height Threshold = {threshold:.5f}).")
 
         # Transparently append low-completeness / excluded specimens if provided
         if all_input_ids:
