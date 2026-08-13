@@ -153,12 +153,13 @@ class PyEukDistanceEngine:
     def compute_snp_weighted_wibs_matrix(
         self,
         df: pd.DataFrame,
+        sequence_map: Optional[Dict[str, str]] = None,
         fasta_path: Optional[str] = None
     ) -> pd.DataFrame:
         """
-        Computes SNP-Weighted KING-Robust wIBS Distance Matrix (PyEuk v3.0.0).
-        Incorporates pairwise sequence alignment Hamming distances between haplotype alleles
-        from FASTA reference definitions, replacing binary mismatch collapse with continuous sequence distance.
+        Computes Reference-Free SNP-Weighted KING-Robust wIBS Distance Matrix (PyEuk v3.0.0).
+        Calculates de novo pairwise sequence alignment Hamming distances directly between called haplotype sequences,
+        eliminating reliance on external reference database files.
         """
         import glob
         clean_df = self.process_haplotype_sheet(df)
@@ -166,9 +167,11 @@ class PyEukDistanceEngine:
         nids = len(ids)
         marker_cols = [c for c in clean_df.columns if c != "Seq_ID"]
 
-        # Load FASTA sequences
+        # Load de novo sequence map or parse input files if provided
         records = {}
-        if fasta_path and os.path.exists(fasta_path):
+        if sequence_map:
+            records.update(sequence_map)
+        elif fasta_path and os.path.exists(fasta_path):
             fpaths = [fasta_path]
         else:
             fpaths = glob.glob("cdc_reference_data/**/*.fasta", recursive=True) + glob.glob("cdc_reference_data/**/*.fa", recursive=True)
