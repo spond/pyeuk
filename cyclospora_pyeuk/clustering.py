@@ -304,13 +304,14 @@ class CyclosporaClusterFinder:
     def detect_micro_clusters(
         self,
         dist_df: pd.DataFrame,
-        micro_threshold: Optional[float] = None,
+        micro_threshold: float = 0.0,
         min_micro_size: int = 2
     ) -> List[List[str]]:
         """
-        Scans distance matrix for micro-clusters (subsets of specimens n >= min_micro_size
-        exhibiting tight pairwise dissimilarity D <= micro_threshold).
-        If micro_threshold is None or >= 0.05, dynamically computes scale-free threshold (1st percentile of non-zero distances).
+        [EXPERIMENTAL DIAGNOSTIC] Scans distance matrix for micro-clusters of specimens
+        (n >= min_micro_size) exhibiting exact or near-identical multi-locus profiles (D <= micro_threshold).
+        By default (micro_threshold=0.0), restricts scans to exact identical profile matches (D <= 1e-6)
+        to prevent single-linkage chaining on noisy background data.
         """
         from scipy.cluster.hierarchy import fcluster, linkage
         from scipy.spatial.distance import squareform
@@ -319,16 +320,10 @@ class CyclosporaClusterFinder:
         np.fill_diagonal(dist_mat, 0.0)
         condensed_dist = squareform(dist_mat, checks=False)
 
-        # Scale-free dynamic micro-threshold calculation if not specified or loose default
-        thresh_val = micro_threshold
-        if thresh_val is None or thresh_val >= 0.05:
-            non_zero_dists = condensed_dist[condensed_dist > 1e-6]
-            if len(non_zero_dists) > 0:
-                # Set threshold to 1st percentile of non-zero pairwise distances
-                calc_thresh = float(np.percentile(non_zero_dists, 1.0))
-                thresh_val = max(1e-5, calc_thresh)
-            else:
-                thresh_val = 0.001
+        # Default to exact zero-distance identical genotype profile matching
+        thresh_val = micro_threshold if micro_threshold is not None else 0.0
+        if thresh_val <= 1e-6:
+            thresh_val = 1e-6
 
         Z = linkage(condensed_dist, method="single", metric="euclidean")
         labels = fcluster(Z, t=thresh_val, criterion="distance")
