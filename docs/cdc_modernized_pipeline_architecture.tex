@@ -141,22 +141,22 @@ The pipeline executes sequentially across three integrated modules:
 
 \subsection{Nomenclature Clarification: Target Genes vs. Amplicon Loci vs. Haplotype Markers}
 
-To resolve potential confusion between genomic and computational terminology, the \textit{Cyclospora cayetanensis} MLST scheme operates across three distinct hierarchical tiers:
+To resolve potential confusion between genomic, laboratory PCR, and computational data terminology, the \textit{Cyclospora cayetanensis} MLST scheme operates across three distinct hierarchical tiers:
 
 \begin{enumerate}[leftmargin=*]
     \item \textbf{8 Target Genes / Genomic Regions (Biological Level):} The CDC MLST scheme targets 8 primary genomic targets: 5 nuclear coding sequences (\texttt{Nu\_CDS1}--\texttt{Nu\_CDS5}), 1 nuclear intergenic junction (\texttt{Nu\_JUN}), 1 ribosomal RNA region (\texttt{Nu\_RRN}), and 1 mitochondrial genome region (\texttt{Mt\_Cmt}).
-    \item \textbf{25 Amplicon Locus Windows (Physical PCR / Locus Level):} Because full-length target genes (1,500--3,000~bp) exceed single-pass 250-bp short-read sequencing lengths, the CDC laboratory tiled the 8 target genes into \textbf{25 overlapping amplicon sub-windows} (e.g., \texttt{Nu\_CDS4} is subdivided into \texttt{PART\_A}, \texttt{PART\_B}, \texttt{PART\_C}, and \texttt{PART\_D}). In computational distance calculations, $L=25$ refers to these 25 amplicon locus windows.
-    \item \textbf{105 Haplotype Markers (Computational Feature Level):} Across all 25 locus windows, there are $K=105$ sequence-verified reference allele variants (e.g., \texttt{Nu\_CDS4\_PART\_A\_Hap\_1}, \texttt{Nu\_CDS4\_PART\_A\_Hap\_2}). In the binary presence matrix $\mathbf{X} \in \{0, 1\}^{N \times 105}$, each column represents a single binary haplotype marker.
+    \item \textbf{$L$ Amplicon Locus Windows (Physical PCR / Locus Level):} Because full-length target genes (1,500--3,000~bp) exceed single-pass 250-bp short-read sequencing lengths, the laboratory tiles target genes into overlapping amplicon sub-windows (e.g., \texttt{Nu\_CDS4} is subdivided into \texttt{PART\_A}, \texttt{PART\_B}, \texttt{PART\_C}, and \texttt{PART\_D}). In the standard CDC reference panel, this yields $L=25$ amplicon locus windows. In the \texttt{PyEuk} engine, $L$ is \textbf{dynamically parsed at runtime} from the column headers of the input data matrix.
+    \item \textbf{$K$ Haplotype Markers (Computational Feature Level):} Across all $L$ locus windows, sequence-verified reference allele variants and novel observed haplotypes form the binary matrix columns (e.g., \texttt{Nu\_CDS4\_PART\_A\_Hap\_1}, \texttt{Nu\_CDS4\_PART\_A\_NEW\_1}). In the CDC 2018 gold standard panel, there are $K=105$ markers. However, $K$ is \textbf{fully dynamic and data-dependent}: as novel haplotypes are discovered (e.g. in Galaxy 203 or Oxford Nanopore cohorts), the \texttt{PyEuk} engine dynamically expands $K$ at runtime without code modification.
 \end{enumerate}
 
 \begin{table}[h]
 \centering
 \small
-\caption{Hierarchical Mapping: 8 Target Genes $\longrightarrow$ 25 Amplicon Locus Sub-Windows $\longrightarrow$ 105 Haplotype Markers}
+\caption{Hierarchical Mapping: 8 Target Genes $\longrightarrow$ $L$ Amplicon Locus Windows $\longrightarrow$ $K$ Haplotype Markers (CDC 2018 Panel Baseline)}
 \label{tab:locus_mapping}
 \begin{tabularx}{\textwidth}{p{4.5cm} X c}
 \toprule
-\textbf{Target Gene / Region (8 Core Genes)} & \textbf{Tiled Amplicon Sub-Windows ($L=25$ Loci)} & \textbf{Sub-Window Count} \\
+\textbf{Target Gene / Region (8 Core Genes)} & \textbf{Tiled Amplicon Sub-Windows (Dynamic $L$ Loci)} & \textbf{Sub-Window Count} \\
 \midrule
 \textbf{1. \texttt{Nu\_CDS1}} & \texttt{Nu\_CDS1\_PART\_A}, \texttt{Nu\_CDS1\_PART\_B}, \texttt{Nu\_CDS1\_PART\_C} & 3 \\
 \textbf{2. \texttt{Nu\_CDS2}} & \texttt{Nu\_CDS2\_PART\_A}, \texttt{Nu\_CDS2\_PART\_B}, \texttt{Nu\_CDS2\_PART\_C} & 3 \\
@@ -167,14 +167,14 @@ To resolve potential confusion between genomic and computational terminology, th
 \textbf{7. \texttt{Nu\_RRN}} & \texttt{Nu\_RRN\_1}, \texttt{Nu\_RRN\_2}, \texttt{Nu\_RRN\_3}, \texttt{Nu\_RRN\_4} & 4 \\
 \textbf{8. \texttt{Mt\_Cmt}} & \texttt{Mt\_Cmt\_1}, \texttt{Mt\_Cmt\_2}, \texttt{Mt\_Cmt\_3} & 3 \\
 \midrule
-\textbf{TOTAL} & \textbf{25 Tiled Amplicon Locus Windows} & \textbf{25} \\
+\textbf{TOTAL (CDC Reference Panel)} & \textbf{25 Tiled Amplicon Locus Windows ($L=25$)} & \textbf{25} \\
 \bottomrule
 \end{tabularx}
 \end{table}
 
 \subsection{Formal Mathematical \& Algorithmic Definitions}
 
-Let $\mathcal{S} = \{S_1, S_2, \dots, S_N\}$ be a cohort of $N$ clinical specimens. The \textit{Cyclospora cayetanensis} MLST panel comprises $L=25$ amplicon locus windows $\mathcal{L} = \{1, 2, \dots, 25\}$. Across all loci, there are $K = \sum_{\nu=1}^{25} M_\nu = 105$ distinct reference haplotype markers, where $M_\nu$ represents the number of active reference alleles defined at locus window $\nu$.
+Let $\mathcal{S} = \{S_1, S_2, \dots, S_N\}$ be a cohort of $N$ clinical specimens. The dataset is represented by a binary presence/absence matrix $\mathbf{X} \in \{0, 1\}^{N \times K}$, where $K$ is the dynamically parsed count of total haplotype markers across $L$ amplicon locus windows $\mathcal{L} = \{1, 2, \dots, L\}$. Across all loci, $K = \sum_{\nu=1}^L M_\nu$, where $M_\nu$ represents the number of distinct active reference alleles and novel variants discovered at locus window $\nu$ in the given dataset.
 
 For specimen $i \in \{1, \dots, N\}$ and locus $\nu \in \{1, \dots, L\}$, let $\mathcal{R}_{i}^{(\nu)}$ be the set of sequencing reads aligning to locus window $\nu$.
 
