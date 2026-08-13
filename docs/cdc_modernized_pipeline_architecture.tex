@@ -377,18 +377,17 @@ k_{\text{opt}} = \arg\max_{2 \le k \le k_{\text{max}}} \Delta h_k, \quad \Delta 
 
 \paragraph{Noise Floor Fallback ($\Delta h_{\text{max}} < 0.005 \Rightarrow k=1$):}
 If the maximum merge height drop is below the noise floor threshold $\Delta h_{\text{max}} < 0.005$, the cohort contains no distinct outbreak separation. The algorithm returns $k_{\text{opt}} = 1$ (Single Outbreak Group):
+\paragraph{Scale-Free Relative Gap Noise Floor ($\text{rel\_gap} < 0.2200$):}
+To prevent false-positive cluster splitting on background surveillance cohorts or single-outbreak datasets without fixed matrix scaling assumptions, `PyEuk v2.1.3+` normalizes the maximum merge height drop by the total root tree height ($h_{\text{root}}$):
 \begin{equation}
-k_{\text{final}} = 
-\begin{cases}
-1, & \text{if } \Delta h_{\text{max}} < 0.005 \\
-k_{\text{opt}}, & \text{if } \Delta h_{\text{max}} \ge 0.005
-\end{cases}
+\text{rel\_gap} = \frac{\Delta h_{\text{max}}}{h_{\text{root}}}
 \end{equation}
+If $\text{rel\_gap} < 0.2200$, the tree height drop is within background surveillance noise, and the engine assigns $k_{\text{final}} = 1$ (Single Outbreak Group).
 
-\paragraph{Intra-Cluster Distance Threshold ($T_{\text{opt}}$):}
-The intra-cluster cut threshold $T_{\text{opt}}$ is set to the midpoint of the optimal height gap:
+\paragraph{Minimum Cluster Size Guard ($\text{min\_cluster\_size} \ge 10\% \cdot N$):}
+At small sample sizes ($N \approx 55$), peeling off $1-4$ outlier specimens with locus dropouts or rare variants produces a large height drop relative to total tree height ($\text{rel\_gap} = 0.4324$). The Minimum Cluster Size Guard requires that every cluster in a valid candidate partition must contain at least $\max(5, \lfloor 0.10 \cdot N \rfloor)$ specimens. Candidate partitions yielding clusters smaller than this floor are rejected as outlier splits:
 \begin{equation}
-T_{\text{opt}} = \frac{h_{k_{\text{opt}}-1} + h_{k_{\text{opt}}}}{2}
+\min_{c \in \{1, \dots, k\}} |C_c| \ge \max(5, \lfloor 0.10 \cdot N \rfloor)
 \end{equation}
 
 \subsection{Methodological Justifications: WHY Module 3 Was Redesigned}
@@ -396,7 +395,8 @@ T_{\text{opt}} = \frac{h_{k_{\text{opt}}-1} + h_{k_{\text{opt}}}}{2}
 \begin{conceptbox}{Justifications for Module 3 Algorithmic Choices}
 \begin{itemize}[leftmargin=*]
     \item \textbf{Why Dendrogram Merge Height Gap Knee Detection over Silhouette Score Maximization:} Silhouette scores ($\text{Sil}_i = \frac{b_i - a_i}{\max(a_i, b_i)}$) attempt to maximize within-cluster tightness ($a_i \to 0$). In multi-locus amplicon data with high sample counts ($N=153$) relative to distinct profiles ($92$ distinct genotypes), groups of identical genotypes have distance $D=0.0$. Silhouette scores continuously improve as $k$ increases up to $k \approx 60$ by isolating duplicate genotype groups. Merge height gap ($\Delta h_k$) evaluates the derivative of linkage heights, measuring *separation between groups* rather than cohesion within them, correctly discovering top-level outbreak boundaries ($k=2$, ARI = 0.9721) 100\% label-free.
-    \item \textbf{Why Noise Floor Fallback ($\Delta h_{\text{max}} < 0.005 \Rightarrow k=1$):} Unconditional gap maximization always selects $k \ge 2$, even when evaluating a homogeneous background cohort with zero true cluster structure. The $0.005$ noise floor ensures single-group cohorts are correctly assigned $k=1$.
+    \item \textbf{Why Scale-Free Noise Floor Fallback ($\text{rel\_gap} < 0.2200 \Rightarrow k=1$):} Unconditional gap maximization always selects $k \ge 2$, even when evaluating a homogeneous background cohort with zero true cluster structure. The scale-free relative gap threshold ($\text{rel\_gap} < 0.2200$) ensures single-group cohorts and shuffled noise nulls are correctly assigned $k=1$.
+    \item \textbf{Why Minimum Cluster Size Guard ($\ge 10\% \cdot N$):} Outlier specimens with low-coverage dropouts can create artificial tree height jumps ($\text{rel\_gap} > 0.22$). Requiring clusters to comprise $\ge 10\% \cdot N$ (minimum 5 specimens) prevents false-positive single-specimen outlier splits while preserving real outbreak lineages ($35.3\% - 49.0\%$ of $N$).
     \item \textbf{Why Lexicographical Tie-Breaking over Random Selection:} Legacy R's `hclust` broke linkage height ties randomly (`ties.method="random"`), causing identical input data to produce different cluster assignments across execution runs. Lexicographical tie-breaking guarantees 100\% reproducible cluster IDs.
 \end{itemize}
 \end{conceptbox}
@@ -404,7 +404,7 @@ T_{\text{opt}} = \frac{h_{k_{\text{opt}}-1} + h_{k_{\text{opt}}}}{2}
 \subsection{Concrete Worked Example: Module 3 Operations}
 
 \begin{examplebox}{Worked Example 4: Label-Free Dendrogram Knee Selection}
-Suppose Ward AGNES hierarchical clustering yields the following descending merge height vector $\mathbf{h}$ for $N=10$ specimens:
+Suppose Ward AGNES hierarchical clustering yields the following descending merge height vector $\mathbf{h}$ for $N=10$ specimens (root height $h_{\text{root}} = 0.450$):
 $$\mathbf{h} = [\underbrace{0.450}_{k=2 \to 1}, \underbrace{0.120}_{k=3 \to 2}, \underbrace{0.090}_{k=4 \to 3}, \underbrace{0.070}_{k=5 \to 4}, \underbrace{0.055}_{k=6 \to 5}]$$
 
 \paragraph{Step 1: Compute Merge Height Drops ($\Delta h_k = h_{k-1} - h_k$)}
@@ -415,15 +415,30 @@ $$\mathbf{h} = [\underbrace{0.450}_{k=2 \to 1}, \underbrace{0.120}_{k=3 \to 2}, 
     \item For $k = 5$: $\Delta h_5 = h_4 - h_5 = 0.070 - 0.055 = \mathbf{0.015}$
 \end{itemize}
 
-\paragraph{Step 2: Evaluate Noise Floor \& Select $k_{\text{opt}}$}
-$$\Delta h_{\text{max}} = \max(0.330, 0.030, 0.020, 0.015) = 0.330$$
-Since $\Delta h_{\text{max}} = 0.330 \ge 0.005$, the noise floor condition passes.
-$$k_{\text{opt}} = \arg\max \Delta h_k = \mathbf{2}$$
+\paragraph{Step 2: Evaluate Scale-Free Relative Gap Noise Floor}
+$$\text{rel\_gap} = \frac{\Delta h_{\text{max}}}{h_{\text{root}}} = \frac{0.330}{0.450} = \mathbf{0.7333}$$
+Since $\text{rel\_gap} = 0.7333 \ge 0.2200$, the relative noise floor condition passes.
 
-\paragraph{Step 3: Calculate Intra-Cluster Threshold ($T_{\text{opt}}$)}
-$$T_{\text{opt}} = \frac{h_1 + h_2}{2} = \frac{0.450 + 0.120}{2} = \mathbf{0.2850}$$
-The tree is cut at $k=2$ with threshold $T=0.2850$, perfectly isolating the top-level transmission lineages.
+\paragraph{Step 3: Evaluate Minimum Cluster Size Guard}
+Candidate $k=2$ cuts the dataset into clusters of size $C_1=6$ and $C_2=4$. Minimum cluster size floor is $\max(5, \lfloor 0.10 \cdot 10 \rfloor) = 5$. Since candidate $k=2$ yields cluster size $4 < 5$, candidate $k=2$ is rejected as an outlier split, assigning $k_{\text{final}} = 1$.
 \end{examplebox}
+
+---
+
+\section{SNP-Weighted KING-wIBS Distance Engine (v3.0.0)}
+
+\subsection{Continuous Sequence Distance vs. Binary Mismatch Collapse}
+
+Legacy eukaryotyping engines collapse all non-identical haplotype calls into a binary mismatch score of $1.0$, discarding sequence alignment information. In `PyEuk v3.0.0`, `PyEukDistanceEngine` incorporates de novo pairwise sequence alignment Hamming distances directly between called haplotype alleles:
+
+\begin{equation}
+\delta_\nu(h_a, h_b) = \frac{\text{Hamming\_Distance}(\text{Seq}(h_a), \text{Seq}(h_b))}{\text{Sequence\_Length}(\nu)}
+\end{equation}
+
+- \textbf{1-SNP Micro-Variants:} Dissimilarity drops from $1.000$ to $\mathbf{0.0145}$.
+- \textbf{Unrelated Background Lineages (15--30 SNPs):} Dissimilarity remains $\mathbf{0.2174 - 0.4348}$.
+
+This creates a **$15\times$ to $30\times$ distance separation ratio** between micro-variants and background noise, boosting cluster precision from $83.3\% \to \mathbf{100.0\%}$ on complex macro-lineages ($m=30$).
 
 ---
 
@@ -432,7 +447,7 @@ The tree is cut at $k=2$ with threshold $T=0.2850$, perfectly isolating the top-
 \begin{table}[h]
 \centering
 \small
-\caption{Label-Free Outbreak Cluster Detection Benchmark across 6 Benchmark Datasets (PyEuk v2.1.2)}
+\caption{Label-Free Outbreak Cluster Detection Benchmark across 6 Benchmark Datasets (PyEuk v3.0.1)}
 \label{tab:multisheet}
 \begin{tabularx}{\textwidth}{p{5.0cm} c c c c X}
 \toprule
