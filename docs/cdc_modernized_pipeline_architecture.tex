@@ -433,9 +433,14 @@ Dendrogram analysis of the 2018 CDC reference dataset ($N=203$ specimens) reveal
 
 \begin{enumerate}
     \item \textbf{Level 1: Global Bipartition ($k=2$):} Bisects the dataset into \texttt{Vendor\_A} ($n=99$) and \texttt{Vendor\_B} ($n=104$) with relative gap ratio $\text{rel\_gap} = 0.4069 \ge 0.2200$.
+    \begin{itemize}
+        \item \texttt{Nu\_CDS4\_PART\_B}: Position 21 \textbf{C $\to$ T transition} (\texttt{Hap\_2} present in 51.5\% of \texttt{Vendor\_A} vs 0.0\% of \texttt{Vendor\_B}).
+        \item \texttt{Nu\_CDS1\_PART\_B}: Position 23 \textbf{T $\to$ C transition} (\texttt{Hap\_2} present in 64.6\% of \texttt{Vendor\_A} vs 0.0\% of \texttt{Vendor\_B}).
+        \item \texttt{Nu\_CDS3\_PART\_A}: Position 67 \textbf{A $\to$ G transition} (\texttt{Hap\_2} present in 48.5\% of \texttt{Vendor\_A} vs 1.9\% of \texttt{Vendor\_B}).
+    \end{itemize}
     \item \textbf{Level 2: Internal Sub-Lineage Hierarchy:}
     \begin{itemize}
-        \item \texttt{Vendor\_A} splits into two major balanced sub-lineages ($n=46$ and $n=47$) plus a 6-specimen micro-branch.
+        \item \texttt{Vendor\_A} splits into two major balanced sub-lineages ($n=46$ and $n=47$) plus a 6-specimen micro-branch. Sub-lineage 2 represents a clonal expansion defined by the linked mutational block \{\texttt{Nu\_CDS4\_PART\_B} (Pos 21 T, 93.6\%), \texttt{Nu\_CDS4\_PART\_A} (\texttt{Hap\_2}, 97.9\%), \texttt{Nu\_CDS1\_PART\_B} (Pos 23 C, 91.5\%)\}.
         \item \texttt{Vendor\_B} consists of a dominant core outbreak strain ($n=91$) and two distinct satellite micro-outbreaks ($n=7$ and $n=6$).
     \end{itemize}
     \item \textbf{Level 3: Micro-Cluster Identical Clone Groups:} \texttt{detect\_micro\_clusters} isolates byte-identical genotype profile matches ($D \le 1\text{e-}6$), including the 7 exact clone groups in \texttt{Vendor\_A}.

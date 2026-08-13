@@ -240,8 +240,16 @@ Level 3: Micro-Clusters     Micro-Clusters         Micro-Clusters
 
 1. **Level 1: Global Bipartition ($k=2$)**:
    - Cleanly bisects the dataset into `Vendor_A` ($n=99$) and `Vendor_B` ($n=104$) with height gap ratio $\text{rel\_gap} = 0.4069 \ge 0.2200$.
+   - **Key Discriminating Mutations**:
+     - `Nu_CDS4_PART_B`: Position 21 **`C -> T` transition** (`Hap_2` present in 51.5% of Vendor_A vs 0.0% of Vendor_B).
+     - `Nu_CDS1_PART_B`: Position 23 **`T -> C` transition** (`Hap_2` present in 64.6% of Vendor_A vs 0.0% of Vendor_B).
+     - `Nu_CDS3_PART_A`: Position 67 **`A -> G` transition** (`Hap_2` present in 48.5% of Vendor_A vs 1.9% of Vendor_B).
 2. **Level 2: Internal Sub-Lineage Hierarchy**:
    - `Vendor_A` splits into two major balanced sub-lineages ($n=46$ and $n=47$) plus a 6-specimen micro-branch.
+   - **Vendor_A Sub-Lineage 2 Clonal Expansion Block**:
+     - `Nu_CDS4_PART_B (Position 21 T)`: Present in **93.6% of Sub-Lineage 2** ($44/47$) vs 10.9% of Sub-Lineage 1.
+     - `Nu_CDS4_PART_A (Hap_2)`: Present in **97.9% of Sub-Lineage 2** ($46/47$) vs 34.8% of Sub-Lineage 1.
+     - `Nu_CDS1_PART_B (Position 23 C)`: Present in **91.5% of Sub-Lineage 2** ($43/47$) vs 43.5% of Sub-Lineage 1.
    - `Vendor_B` consists of a dominant core outbreak strain ($n=91$) and two distinct satellite micro-outbreaks ($n=7$ and $n=6$).
 3. **Level 3: Micro-Cluster Identical Clone Groups**:
    - `detect_micro_clusters` isolates byte-identical genotype profile matches ($D \le 1\text{e-}6$), including the 7 exact clone groups in `Vendor_A`.
