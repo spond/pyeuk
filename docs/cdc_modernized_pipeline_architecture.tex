@@ -172,6 +172,13 @@ To resolve potential confusion between genomic, laboratory PCR, and computationa
 \end{tabularx}
 \end{table}
 
+\begin{conceptbox}{Biological Rationale: Why Legacy Pipelines Operated at Amplicon Sub-Windows vs. Long-Read Full-Gene Phasing}
+\begin{itemize}[leftmargin=*]
+    \item \textbf{The Short-Read Phasing Paradox:} Short-read Illumina sequencing (150--250~bp paired-end) cannot physically span full-length 3,000-bp gene targets (e.g. \texttt{Nu\_CDS4}). Reads from \texttt{Nu\_CDS4\_PART\_A} and \texttt{Nu\_CDS4\_PART\_D} are physically unphased. In multi-strain co-infections (high Multiplicity of Infection, MOI), attempting to assemble short amplicons into full-length genes creates \textbf{synthetic chimeric haplotypes} (erroneously linking Strain 1's \texttt{PART\_A} with Strain 2's \texttt{PART\_D}). To prevent chimeric assembly artifacts, the legacy CDC pipeline was forced to operate strictly at the artificial \textbf{amplicon sub-window level}.
+    \item \textbf{Long-Read True Gene-Level Phasing (\texttt{process-ont}):} Oxford Nanopore (ONT R10) and PacBio HiFi long reads physically span 1,500--3,000+~bp in single continuous read passes. A single long read spans from the $5'$ to $3'$ end of the target gene, providing $100\%$ exact physical phasing. \texttt{PyEuk}'s \texttt{process-ont} module clusters long reads directly into true full-gene haplotypes, eliminating artificial amplicon tiling windows entirely.
+\end{itemize}
+\end{conceptbox}
+
 \subsection{Formal Mathematical \& Algorithmic Definitions}
 
 Let $\mathcal{S} = \{S_1, S_2, \dots, S_N\}$ be a cohort of $N$ clinical specimens. The dataset is represented by a binary presence/absence matrix $\mathbf{X} \in \{0, 1\}^{N \times K}$, where $K$ is the dynamically parsed count of total haplotype markers across $L$ amplicon locus windows $\mathcal{L} = \{1, 2, \dots, L\}$. Across all loci, $K = \sum_{\nu=1}^L M_\nu$, where $M_\nu$ represents the number of distinct active reference alleles and novel variants discovered at locus window $\nu$ in the given dataset.
