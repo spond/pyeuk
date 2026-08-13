@@ -238,8 +238,8 @@ class CyclosporaClusterFinder:
                 sorted_gaps = sorted(gap_scores, key=lambda x: x[1], reverse=True)
                 tree_height = float(heights[0]) if len(heights) > 0 else 1.0
                 
-                # Minimum cluster size guard: at least 5% of samples or min 3 specimens
-                min_required_size = max(3, int(0.05 * n_samples))
+                # Minimum cluster size guard: at least 10% of samples or min 5 specimens
+                min_required_size = max(5, int(0.10 * n_samples))
                 
                 valid_k_found = False
                 for candidate in sorted_gaps:
