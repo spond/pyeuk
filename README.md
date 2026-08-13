@@ -209,9 +209,9 @@ Jackknife Perturbation Metrics (15 Replicates, 10% Random Drop):
 
 To guard against false cluster splitting on background surveillance cohorts or single-outbreak datasets without fixed matrix scaling assumptions, `PyEuk v2.1.3` normalizes maximum merge height drop by total root tree height (`rel_gap = max_gap / tree_height`):
 
-- **CDC 153 & Galaxy Outbreak Sheets**: `rel_gap = 0.2980 - 0.5299` ($\ge 0.2200$) $\rightarrow$ **$k = 2$ ($100\%$ Outbreak Accuracy)**.
-- **Single-Outbreak Null Cohort (Vendor_A)**: `rel_gap = 0.2081` ($< 0.2200$) $\rightarrow$ **$k = 1$ (Correct Single Group)**.
-- **Synthetic Shuffled Null**: `rel_gap = 0.0781` ($< 0.2200$) $\rightarrow$ **$k = 1$ (Correct Null Detection)**.
+- **CDC 153 & Galaxy Outbreak Sheets**: `rel_gap = 0.2980 - 0.5299` ($\ge 0.2200$), `min_cluster_size` = $52-83$ ($\ge 5\% \cdot N$) $\rightarrow$ **$k = 2$ ($100\%$ Outbreak Accuracy across 6/6 sheets)**.
+- **Single-Outbreak Null Cohorts (Vendor_A & Vendor_B)**: `min_cluster_size` = $1-4$ ($< 5\% \cdot N$) $\rightarrow$ **$k = 1$ (Correct Single Group across 4/4 nulls)**.
+- **Synthetic Shuffled Nulls**: `rel_gap = 0.0695 - 0.0781` ($< 0.2200$) $\rightarrow$ **$k = 1$ (Correct Null Detection)**.
 
 ---
 
