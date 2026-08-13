@@ -150,6 +150,125 @@ class PyEukDistanceEngine:
         print("[PyEuk-wIBS] Revised wIBS Distance Matrix successfully computed (PSD Guaranteed: lambda_min >= 0.0).")
         return pd.DataFrame(D_psd, index=ids, columns=ids)
 
+    def compute_snp_weighted_wibs_matrix(
+        self,
+        df: pd.DataFrame,
+        fasta_path: Optional[str] = None
+    ) -> pd.DataFrame:
+        """
+        Computes SNP-Weighted KING-Robust wIBS Distance Matrix (PyEuk v3.0.0).
+        Incorporates pairwise sequence alignment Hamming distances between haplotype alleles
+        from FASTA reference definitions, replacing binary mismatch collapse with continuous sequence distance.
+        """
+        import glob
+        clean_df = self.process_haplotype_sheet(df)
+        ids = clean_df["Seq_ID"].tolist()
+        nids = len(ids)
+        marker_cols = [c for c in clean_df.columns if c != "Seq_ID"]
+
+        # Load FASTA sequences
+        records = {}
+        if fasta_path and os.path.exists(fasta_path):
+            fpaths = [fasta_path]
+        else:
+            fpaths = glob.glob("cdc_reference_data/**/*.fasta", recursive=True) + glob.glob("cdc_reference_data/**/*.fa", recursive=True)
+
+        for fp in fpaths:
+            if "Illumina" in fp or "MAPPING" in fp:
+                continue
+            with open(fp) as f:
+                cur_header = None
+                seq_lines = []
+                for line in f:
+                    line = line.strip()
+                    if line.startswith(">"):
+                        if cur_header:
+                            records[cur_header] = "".join(seq_lines)
+                        cur_header = line[1:].strip()
+                        seq_lines = []
+                    else:
+                        seq_lines.append(line)
+                if cur_header:
+                    records[cur_header] = "".join(seq_lines)
+
+        def norm_h(name):
+            if "." in name:
+                name = name.split(".")[-1]
+            return name.replace("-", "_").strip()
+
+        fasta_map = {norm_h(k): seq for k, seq in records.items()}
+
+        def seq_dist(seq1, seq2):
+            min_len = min(len(seq1), len(seq2))
+            mismatches = sum(1 for a, b in zip(seq1[:min_len], seq2[:min_len]) if a != b)
+            mismatches += abs(len(seq1) - len(seq2))
+            max_len = max(len(seq1), len(seq2))
+            return float(mismatches) / float(max_len) if max_len > 0 else 0.0
+
+        # Group marker columns by locus window
+        locus_map = {}
+        for col in marker_cols:
+            loc = col.split("_Hap_")[0]
+            locus_map.setdefault(loc, []).append(col)
+
+        dist_mat = np.zeros((nids, nids), dtype=np.float64)
+        sample_active = []
+        for idx, row in clean_df.iterrows():
+            locus_active = {}
+            for locus, cols in locus_map.items():
+                active_cols = [c for c in cols if row[c] == "X"]
+                if active_cols:
+                    locus_active[locus] = active_cols
+            sample_active.append(locus_active)
+
+        for i in range(nids):
+            for j in range(i + 1, nids):
+                common_loci = set(sample_active[i].keys()) & set(sample_active[j].keys())
+                if not common_loci:
+                    dist_mat[i, j] = 0.0
+                    dist_mat[j, i] = 0.0
+                    continue
+
+                locus_scores = []
+                for loc in common_loci:
+                    haps_i = sample_active[i][loc]
+                    haps_j = sample_active[j][loc]
+                    if set(haps_i) & set(haps_j):
+                        locus_scores.append(0.0)
+                    else:
+                        min_d = 1.0
+                        for hi in haps_i:
+                            seq_i = fasta_map.get(norm_h(hi), "")
+                            for hj in haps_j:
+                                seq_j = fasta_map.get(norm_h(hj), "")
+                                if seq_i and seq_j:
+                                    d = seq_dist(seq_i, seq_j)
+                                else:
+                                    d = 1.0
+                                if d < min_d:
+                                    min_d = d
+                        locus_scores.append(min_d)
+
+                mean_dist = float(np.mean(locus_scores)) if locus_scores else 0.0
+                dist_mat[i, j] = mean_dist
+                dist_mat[j, i] = mean_dist
+
+        # Gram matrix PSD Projection
+        H = np.eye(nids) - np.ones((nids, nids)) / float(nids)
+        G = -0.5 * H @ (dist_mat ** 2) @ H
+        evals, evecs = np.linalg.eigh(G)
+        evals_clipped = np.maximum(evals, 0.0)
+        G_psd = evecs @ np.diag(evals_clipped) @ evecs.T
+
+        diag_g = np.diag(G_psd)
+        D_sq = np.clip(diag_g[:, None] + diag_g[None, :] - 2.0 * G_psd, 0.0, None)
+        D_psd = np.sqrt(D_sq)
+        D_psd = (D_psd + D_psd.T) / 2.0
+        np.fill_diagonal(D_psd, 0.0)
+
+        print("[PyEuk-SNP-wIBS] SNP-Weighted wIBS Distance Matrix successfully computed (PSD Guaranteed: lambda_min >= 0.0).")
+        return pd.DataFrame(D_psd, index=ids, columns=ids)
+
     def compute_ensemble_matrix(self, df: pd.DataFrame) -> pd.DataFrame:
         """
         Computes the dual-ensemble matrix (Barratt Heuristic + Plucinski Bayesian LLR Rank Integration).

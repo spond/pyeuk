@@ -68,7 +68,15 @@ class TestCyclosporaPyEuk(unittest.TestCase):
         micro_clusters = finder.detect_micro_clusters(wibs_df, micro_threshold=0.10, min_micro_size=2)
         self.assertIsInstance(micro_clusters, list)
 
+    def test_snp_weighted_wibs_matrix(self):
+        engine = PyEukDistanceEngine()
+        snp_df = engine.compute_snp_weighted_wibs_matrix(self.mock_data)
+        self.assertIsInstance(snp_df, pd.DataFrame)
+        self.assertEqual(snp_df.shape[0], snp_df.shape[1])
+        np.testing.assert_allclose(np.diag(snp_df.values), 0.0, atol=1e-6)
+
 
 if __name__ == "__main__":
     unittest.main()
+
 
