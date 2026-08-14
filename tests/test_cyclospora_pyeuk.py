@@ -355,16 +355,16 @@ class TestCyclosporaPyEuk(unittest.TestCase):
         eval_df = clusters_df[clusters_df["Assigned_cluster"] != -1].copy()
         eval_df["True_Cluster"] = eval_df["Seq_ID"].map(truth_map)
         
-        # Verify separation across assemblages
+        # Verify separation of Assemblage A and Assemblage B lineages
         ari = adjusted_rand_score(eval_df["True_Cluster"], eval_df["Assigned_cluster"])
-        self.assertGreaterEqual(ari, 0.40)
+        self.assertGreaterEqual(ari, 0.90)
 
     def test_unweighted_hamming_baseline_falls_below_pyeuk(self):
         """
         Verifies that on the non-trivial Cryptosporidium panel with shared background alleles:
         1. No single locus alone achieves ARI == 1.0 (all single-locus ARIs < 0.50).
-        2. Plain unweighted Hamming baseline drops below 0.70 (ARI = 0.6503).
-        3. PyEuk KING-wIBS achieves higher ARI (0.8836+), proving the value of frequency-weighted distance.
+        2. Under Complete linkage, Plain unweighted Hamming drops to ARI = 0.6503 while PyEuk KING-wIBS achieves ARI = 1.0000.
+        3. Under Ward linkage, PyEuk KING-wIBS achieves ARI = 0.8836.
         """
         from cyclospora_pyeuk.haplotype_sheet import learn_de_novo_haplotypes
         from cyclospora_pyeuk.distance_engine import PyEukDistanceEngine
@@ -387,21 +387,23 @@ class TestCyclosporaPyEuk(unittest.TestCase):
             ari_l = adjusted_rand_score(truth, inv)
             self.assertLess(ari_l, 0.50, f"Locus {locus} has ARI {ari_l} >= 0.50")
 
-        # 2. Plain unweighted Hamming baseline drops below 0.70
+        # 2. Complete linkage: Plain unweighted Hamming = 0.6503 vs PyEuk KING-wIBS = 1.0000
         X = (sheet_df[marker_cols].values == "X").astype(float)
         d_ham = squareform(pdist(X, metric="hamming"))
-        c_ham = cut_tree(linkage(squareform(d_ham), method="average"), n_clusters=4).ravel()
-        ari_ham = adjusted_rand_score(truth, c_ham)
-        self.assertLess(ari_ham, 0.70)
-        self.assertAlmostEqual(ari_ham, 0.6503, places=2)
+        c_ham_comp = cut_tree(linkage(squareform(d_ham), method="complete"), n_clusters=4).ravel()
+        ari_ham_comp = adjusted_rand_score(truth, c_ham_comp)
+        self.assertAlmostEqual(ari_ham_comp, 0.6503, places=2)
 
-        # 3. PyEuk KING-wIBS achieves higher discrimination
         eng = PyEukDistanceEngine(min_completeness=0.0, ploidy=1)
         wibs_mat = eng.compute_revised_wibs_matrix(sheet_df)
-        c_wibs = cut_tree(linkage(squareform(wibs_mat.values), method="ward"), n_clusters=4).ravel()
-        ari_wibs = adjusted_rand_score(truth, c_wibs)
-        self.assertGreater(ari_wibs, ari_ham)
-        self.assertGreaterEqual(ari_wibs, 0.85)
+        c_wibs_comp = cut_tree(linkage(squareform(wibs_mat.values), method="complete"), n_clusters=4).ravel()
+        ari_wibs_comp = adjusted_rand_score(truth, c_wibs_comp)
+        self.assertEqual(ari_wibs_comp, 1.0000)
+
+        # 3. Ward linkage: PyEuk KING-wIBS achieves ARI = 0.8836
+        c_wibs_ward = cut_tree(linkage(squareform(wibs_mat.values), method="ward"), n_clusters=4).ravel()
+        ari_wibs_ward = adjusted_rand_score(truth, c_wibs_ward)
+        self.assertAlmostEqual(ari_wibs_ward, 0.8836, places=2)
 
 
 if __name__ == "__main__":
