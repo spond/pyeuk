@@ -1,6 +1,0 @@
-Seq_ID	Assigned_cluster
-Sample_A	1
-Sample_B	1
-Sample_C	2
-Sample_D	1
-Sample_E	3
