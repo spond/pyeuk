@@ -21,11 +21,11 @@ It replaces legacy, brittle heuristics with a fast, mathematically rigorous dist
 ### 2. Dropout-Robust Genetic Distance Engine
 * **KING-Weighted Identity-by-State (wIBS)**: Evaluates pairwise genetic dissimilarity across multi-locus marker panels, properly weighting population allele frequencies and handling co-infections.
 * **Pairwise-Complete Dropout Tolerance**: Dissimilarity is computed only over mutually amplified loci, preventing PCR sequencing dropouts from triggering artificial distance spikes.
-* **Gram Matrix PSD Projection**: Guarantees positive semi-definite Euclidean metric geometry ($\lambda_{\min} \ge 0.0$) for valid, mathematically sound Ward hierarchical clustering.
+* **Gram Matrix PSD Projection**: Guarantees positive semi-definite Euclidean metric geometry (`λ_min >= 0.0`) for valid, mathematically sound Ward hierarchical clustering.
 * **Vectorized Acceleration**: Accelerated via vectorized NumPy and Numba JIT kernels (**99.2× faster** than legacy R scripts, processing 1,000+ specimens in seconds).
 
 ### 3. Automated Label-Free Outbreak Clustering
-* **Unsupervised Knee Detection**: Automatically determines the optimal number of outbreak clusters ($k$) via scale-free relative merge-height gap analysis (`rel_gap ≥ 0.2200`), eliminating the need for labeled training data or manual cutoffs.
+* **Unsupervised Knee Detection**: Automatically determines the optimal number of outbreak clusters (`k`) via scale-free relative merge-height gap analysis (`rel_gap >= 0.2200`), eliminating the need for labeled training data or manual cutoffs.
 * **100% Deterministic Tree Cuts**: Uses lexicographical tie-breaking to eliminate non-deterministic clustering artifacts across runs.
 * **Outlier & Noise Guards**: Incorporates cohort size guards to prevent false cluster splitting on background surveillance samples.
 
@@ -66,9 +66,9 @@ Every PyEuk run produces clean, standard tabular files in the specified output d
 
 | Output File | Format | Description |
 | :--- | :--- | :--- |
-| **`haplotype_data_sheet.txt`** | TSV Matrix | Binary presence/absence matrix (`Seq_ID` $\times$ Markers, with `X` = present). |
-| **`ensemble_distance_matrix.csv`** | CSV Matrix | Pairwise KING-wIBS genetic distance matrix ($0.0 = \text{identical}$, $1.0 = \text{divergent}$). |
-| **`RESULTING_CLUSTERS_<k>.txt`** | TSV Table | Final outbreak cluster assignments (`Seq_ID` $\to$ `Assigned_cluster`). |
+| **`haplotype_data_sheet.txt`** | TSV Matrix | Binary presence/absence matrix (`Seq_ID` × Markers, with `X` = present). |
+| **`ensemble_distance_matrix.csv`** | CSV Matrix | Pairwise KING-wIBS genetic distance matrix (`0.0 = identical`, `1.0 = divergent`). |
+| **`RESULTING_CLUSTERS_<k>.txt`** | TSV Table | Final outbreak cluster assignments (`Seq_ID` → `Assigned_cluster`). |
 | **`learned_refs.fasta`** *(De Novo)* | FASTA | Representative sequences of all unique alleles discovered in the cohort. |
 
 ---
@@ -172,16 +172,16 @@ print(f"Detected {k} outbreak clusters across {len(clusters_df)} specimens.")
 
 ## 📊 Performance & Validation Highlights
 
-| Benchmark Dataset | Pathogen | Specimen Count ($N$) | Selected $k$ (Label-Free) | Adjusted Rand Index (ARI) | Notes |
+| Benchmark Dataset | Pathogen | Specimen Count (N) | Selected k (Label-Free) | Adjusted Rand Index (ARI) | Notes |
 | :--- | :--- | :---: | :---: | :---: | :--- |
-| **CDC Outbreak Benchmark** | *Cyclospora cayetanensis* | 153 | **$k = 2$** | **0.9721** | 99.1% sensitivity, 98.1% specificity against gold standard |
-| **Expanded Surveillance Cohort** | *Cyclospora cayetanensis* | 203 | **$k = 2$** | **1.0000** | Perfect 1-to-1 recovery of multi-state outbreaks |
-| **Cryptosporidium MLST Panel** | *Cryptosporidium hominis/parvum* | 14 | **$k = 3$** | **1.0000** | 100% concordance across *C. hominis*, *C. parvum*, and *C. meleagridis* ([`PROVENANCE.md`](example_data/cryptosporidium/PROVENANCE.md)) |
-| **Giardia MLST Benchmark** | *Giardia duodenalis* | 14 | **$k = 2$** | **1.0000** | 100% concordance separating Assemblage A from Assemblage B ([`PROVENANCE.md`](example_data/giardia/PROVENANCE.md)) |
-| **De Novo Reference-Free Run** | *Cyclospora cayetanensis* | 11 | **$k = 2$** | **1.0000** | 100% concordance with 0 reference database guidance |
+| **CDC Outbreak Benchmark** | *Cyclospora cayetanensis* | 153 | **k = 2** | **0.9721** | 99.1% sensitivity, 98.1% specificity against gold standard |
+| **Expanded Surveillance Cohort** | *Cyclospora cayetanensis* | 203 | **k = 2** | **1.0000** | Perfect 1-to-1 recovery of multi-state outbreaks |
+| **Cryptosporidium MLST Panel** | *Cryptosporidium hominis/parvum* | 14 | **k = 3** | **1.0000** | 100% concordance across *C. hominis*, *C. parvum*, and *C. meleagridis* ([`PROVENANCE.md`](example_data/cryptosporidium/PROVENANCE.md)) |
+| **Giardia MLST Benchmark** | *Giardia duodenalis* | 14 | **k = 2** | **1.0000** | 100% concordance separating Assemblage A from Assemblage B ([`PROVENANCE.md`](example_data/giardia/PROVENANCE.md)) |
+| **De Novo Reference-Free Run** | *Cyclospora cayetanensis* | 11 | **k = 2** | **1.0000** | 100% concordance with 0 reference database guidance |
 
-* **Speedup**: Distance matrix computation on $N = 1,078$ national surveillance specimens drops from **24.6 minutes to 14.9 seconds** (99.2× faster).
-* **Metric Validity**: Gram matrix PSD projection guarantees $\lambda_{\min} \ge 0.0$ across both wIBS and Ensemble distance matrices, eliminating distorted hierarchical tree geometries.
+* **Speedup**: Distance matrix computation on N = 1,078 national surveillance specimens drops from **24.6 minutes to 14.9 seconds** (99.2× faster).
+* **Metric Validity**: Gram matrix PSD projection guarantees `λ_min >= 0.0` across both wIBS and Ensemble distance matrices, eliminating distorted hierarchical tree geometries.
 
 ---
 
