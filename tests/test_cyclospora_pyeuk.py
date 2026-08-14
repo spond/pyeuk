@@ -197,6 +197,29 @@ class TestCyclosporaPyEuk(unittest.TestCase):
         d13_mut3 = (2*2.12132034 + 1.0) / (2*2.12132034 + 4.0)
         self.assertNotAlmostEqual(float(mat.loc["S1", "S3"]), d13_mut3, places=2)
 
+    def test_bayesian_plucinski_distance_pin_and_mutant_kill(self):
+        """
+        Pins exact Plucinski Bayesian distance on a 3-specimen x 2-locus fixture and explicitly asserts
+        that reversing the posterior mapping (d_b = 2*P[2] + 1*P[1] + 0*P[0]) fails the test suite.
+        """
+        df = pd.DataFrame([
+            {"Seq_ID": "S1", "Nu_1_Hap_1": "X", "Nu_1_Hap_2": "", "Nu_2_Hap_1": "X", "Nu_2_Hap_2": ""},
+            {"Seq_ID": "S2", "Nu_1_Hap_1": "X", "Nu_1_Hap_2": "", "Nu_2_Hap_1": "X", "Nu_2_Hap_2": ""},
+            {"Seq_ID": "S3", "Nu_1_Hap_1": "",  "Nu_1_Hap_2": "X", "Nu_2_Hap_1": "",  "Nu_2_Hap_2": "X"},
+        ])
+        engine = PyEukDistanceEngine(min_completeness=0.0)
+        ids, loci_data, ploidy = engine._extract_locus_data(df)
+        d_bayes = engine.compute_bayesian_distance(ids, loci_data, ploidy)
+
+        # Exact pinned Bayesian distance values
+        np.testing.assert_allclose(d_bayes[0, 1], 0.772727, rtol=1e-4)
+        np.testing.assert_allclose(d_bayes[0, 2], 1.552873, rtol=1e-4)
+        self.assertLess(d_bayes[0, 1], d_bayes[0, 2])
+
+        # Assert reversed mapping mutant (d_b = 2.0*P[2] + 1.0*P[1] + 0.0*P[0]) diverges significantly
+        d12_mut = 2.0 - 0.772727 # 1.227273
+        self.assertNotAlmostEqual(float(d_bayes[0, 1]), d12_mut, places=2)
+
     def test_ploidy_differentiation(self):
         """Tests that ploidy=1, ploidy=2, and locus-specific ploidy produce distinct, mathematically valid matrices."""
         df = pd.DataFrame([
