@@ -2,7 +2,7 @@ from setuptools import setup, find_packages
 
 setup(
     name="cyclospora_pyeuk",
-    version="2.0.0",
+    version="0.3.0",
     description="Modern CDC Cyclospora cayetanensis MLST typing, Eukaryotyping ensemble distance engine, and outbreak cluster finder",
     author="BRC-Analytics / CDC Modernization Team",
     packages=find_packages(),

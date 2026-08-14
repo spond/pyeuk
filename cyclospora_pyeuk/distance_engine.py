@@ -163,7 +163,7 @@ class PyEukDistanceEngine:
         fasta_path: Optional[str] = None
     ) -> pd.DataFrame:
         """
-        Computes Reference-Free SNP-Weighted KING-Robust wIBS Distance Matrix (PyEuk v3.0.0).
+        Computes Reference-Free SNP-Weighted KING-Robust wIBS Distance Matrix (PyEuk v0.3.0).
         Calculates de novo pairwise sequence alignment Hamming distances directly between called haplotype sequences,
         eliminating reliance on external reference database files.
         """

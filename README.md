@@ -1,6 +1,6 @@
 # PyEuk: Modernized *Cyclospora cayetanensis* MLST Genotyping & Outbreak Cluster Finder
 
-[![Version](https://img.shields.io/badge/version-2.1.2-blue.svg)](https://github.com/spond/pyeuk)
+[![Version](https://img.shields.io/badge/version-0.3.0-blue.svg)](https://github.com/spond/pyeuk)
 [![Python](https://img.shields.io/badge/python-3.8%2B-green.svg)](https://www.python.org/)
 [![License](https://img.shields.io/badge/license-Apache%202.0-orange.svg)](LICENSE)
 [![Acceleration](https://img.shields.io/badge/speedup-99.2x-brightgreen.svg)]()
@@ -13,12 +13,15 @@ Re-engineered from the original CDC High Sierra ALPHA release, **PyEuk** replace
 
 ## Key Modernizations & Features
 
+- **External Assembly Ingestion (`-a / --assembled-fasta`)**: Ingests raw assembled FASTA contigs directly from SPAdes, Flye, MEGAHIT, or Galaxy workflows, matching contigs to marker dictionaries without requiring legacy manual BLAST scripts.
+- **Reference-Free De Novo Haplotype Discovery (`--de-novo`)**: Discovers homologous locus windows and unique phased haplotypes directly from assembled sequence contigs with zero dependence on external reference databases.
+- **Principled & Deterministic Naming Scheme**: Mints globally reproducible `<Locus>_L<Length>bp.H<Rank>_<Hash4>` identifiers embedding locus anchor, amplicon length in bp, cohort prevalence rank, and a 4-character MD5 content hash.
 - **KING-Robust Weighted Identity-by-State (wIBS) Distance Engine**: Ingests multi-locus haplotype presence patterns across 105 markers (partitioned into 25 amplicon locus windows), evaluating pairwise dissimilarity over called loci to prevent sequencing dropouts from triggering artificial distance spikes.
 - **Gram Matrix PSD Projection**: Applies classical MDS double-centering `G = -1/2 * H * (D ∘ D) * H` and eigenvalue clipping `G_psd = V * max(Λ, 0) * V^T`, mathematically guaranteeing positive semi-definite (`λ_min ≥ 0.0`) Euclidean metric spaces required for Ward's hierarchical clustering.
 - **Robust Vectorized NumPy Engine**: Accelerates distance calculation from **24.6 minutes down to 14.9 seconds** (99.2× speedup) on national surveillance batches (`N = 1,078`) with zero C-ABI / Numba dependencies.
 - **Oxford Nanopore (ONT) Long-Read & Hybrid Integration**: Direct alignment, read quality filtering (`Q10+`), Medaka/Racon polishing, and hybrid Illumina+ONT haplotype assembly.
 - **HyPhy Evolutionary Selection Suite**: Built-in 12 target gene selection catalog evaluating gene-wide episodic diversifying selection (BUSTED), site-level selection (MEME, FEL, SLAC), and biophysical property constraints (PRIME).
-- **Prospective Unsupervised & Supervised Clustering**: Supports prospective outbreak cluster detection without requiring labeled ground truth, as well as epidemiological threshold calibration.
+- **Prospective Unsupervised & Supervised Clustering**: Supports prospective outbreak cluster detection via scale-free relative merge-height gap knee detection (`rel_gap ≥ 0.2200`) and outlier size guards without requiring labeled ground truth.
 - **Native ZIP Archive & Directory Ingestion**: Automatically reads specimen genotype files directly from `.zip` archives (e.g. `SPECIMEN_GENOTYPES.zip`) or raw file folders without manual unzipping.
 - **100% Deterministic Agglomerative Clustering**: Replaces legacy R's non-deterministic `ties.method="random"` with lexicographical tie-breaking, producing 100% reproducible outbreak cluster dendrograms across runs.
 
@@ -182,7 +185,7 @@ clusters_df, k, thresh = cluster_finder.find_clusters(
 
 ### 1. Label-Free Outbreak Cluster Detection across 6 Benchmark Datasets
 
-Evaluation of **PyEuk v2.1.2** using **Dendrogram Merge Height Gap Knee Detection (Label-Free Elbow Rule)** across 6 distinct CDC and Galaxy multi-locus amplicon datasets demonstrates **100% accuracy without requiring epidemiological gold standard labels**:
+Evaluation of **PyEuk v0.3.0** using **Dendrogram Merge Height Gap Knee Detection (Label-Free Elbow Rule)** across 6 distinct CDC and Galaxy multi-locus amplicon datasets demonstrates **100% accuracy without requiring epidemiological gold standard labels**:
 
 | Benchmark Haplotype Sheet | Specimen Count (N) | Marker Window Panel | Selected k (Label-Free) | Adjusted Rand Index (ARI) | Performance Summary |
 | :--- | :---: | :---: | :---: | :---: | :--- |
@@ -221,14 +224,14 @@ Jackknife Perturbation Metrics (15 Replicates, 10% Random Drop):
 
 ### 4. Scale-Free Relative Gap Noise Floor Fallback (`rel_gap < 0.2200`)
 
-To guard against false cluster splitting on background surveillance cohorts or single-outbreak datasets without fixed matrix scaling assumptions, `PyEuk v2.1.3` normalizes maximum merge height drop by total root tree height (`rel_gap = max_gap / tree_height`):
+To guard against false cluster splitting on background surveillance cohorts or single-outbreak datasets without fixed matrix scaling assumptions, `PyEuk` normalizes maximum merge height drop by total root tree height (`rel_gap = max_gap / tree_height`):
 
 - **CDC 153 & Galaxy Outbreak Sheets**: `rel_gap = 0.2980 - 0.5299` (≥ 0.2200), `min_cluster_size` = 52-98 (≥ 10% · N) → **k = 2 (100% Outbreak Accuracy across 6/6 sheets)**.
 - **Single-Outbreak Null Cohorts (Vendor_A, Vendor_B & Subsamples)**: `min_cluster_size` = 1-4 (< 10% · N) → **k = 1 (Correct Single Group across 10/10 null cohorts)**.
 - **Synthetic Shuffled Nulls**: `rel_gap = 0.0695 - 0.0781` (< 0.2200) → **k = 1 (Correct Null Detection across 2/2 synthetic nulls)**.
 - **Prospective Detection Floor**: In prospective label-free mode (`cyclospora-typing cluster`), minor outbreak lineages representing < 10% of a surveillance batch (m ≤ 15 out of N ≈ 100) are conservatively reported as k = 1 (Single Outbreak Group) to guarantee 0% false positive cluster splitting on background surveillance cohorts.
 - **Experimental Pairwise Diagnostic Scanner**: `detect_micro_clusters(dist_df)` identifies exact 1-to-1 identical multi-locus genotype profile matches (`D ≤ 1e-6`), eliminating single-linkage chaining on background noise (0 false positives on synthetic shuffled nulls).
-- **SNP-Weighted KING-Standardized wIBS Engine (`v3.1.0`)**: `compute_snp_weighted_wibs_matrix(df)` combines continuous sequence alignment Hamming distances (`d_SNP = SNPs / L`) with KING population allele-frequency weights (`w_L = 1 / sqrt(p_L * (1-p_L))`), passing synthetic shuffled noise nulls (`k = 1`) while achieving **100.0% Cluster Precision** across macro-outbreaks (`m = 30`).
+- **SNP-Weighted KING-Standardized wIBS Engine**: `compute_snp_weighted_wibs_matrix(df)` combines continuous sequence alignment Hamming distances (`d_SNP = SNPs / L`) with KING population allele-frequency weights (`w_L = 1 / sqrt(p_L * (1-p_L))`), passing synthetic shuffled noise nulls (`k = 1`) while achieving **100.0% Cluster Precision** across macro-outbreaks (`m = 30`).
 
 ---
 

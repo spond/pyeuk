@@ -64,7 +64,7 @@ def fetch_test_data(target_dir: str = "./cdc_reference_data"):
 
 def main():
     parser = argparse.ArgumentParser(
-        description="CDC Cyclospora cayetanensis MLST Genotyping & Eukaryotyping Workflow (v2.1.0)"
+        description="CDC Cyclospora cayetanensis MLST Genotyping & Eukaryotyping Workflow (v0.3.0)"
     )
     subparsers = parser.add_subparsers(dest="command", help="Available subcommands")
 
