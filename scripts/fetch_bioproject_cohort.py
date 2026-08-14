@@ -93,7 +93,7 @@ def build_cryptosporidium_cohort(output_fasta: str, output_gold: str, output_pro
     cm_hsp = ch_hsp[:200] + "A"*5 + ch_hsp[205:]
     
     ch_cowp_1 = seqs.get("AF248743.1", "C"*480)[:483]
-    ch_cowp_2 = ch_cowp_1[:210] + "TACGGT" + ch_cowp_1[216:]
+    ch_cowp_1 = ch_cowp_1[:210] + "TACGGT" + ch_cowp_1[216:]
     cp_cowp   = seqs.get("AF248741.1", "C"*480)[:483]
     cm_cowp   = ch_cowp_1[:120] + "AGTTCA" + ch_cowp_1[126:]
     
@@ -115,12 +115,12 @@ def build_cryptosporidium_cohort(output_fasta: str, output_gold: str, output_pro
         {"id": "CH_WB_05", "group": "Cluster_1", "loci": {"18S": ch_18s, "HSP70": ch_hsp, "gp60": ch_gp60_ib}},
         {"id": "CH_WB_06", "group": "Cluster_1", "loci": {"18S": ch_18s, "COWP": ch_cowp_1, "gp60": ch_gp60_ib}},
 
-        {"id": "CH_DC_01", "group": "Cluster_2", "loci": {"18S": ch_18s, "HSP70": ch_hsp, "COWP": ch_cowp_2, "gp60": ch_gp60_ia}},
-        {"id": "CH_DC_02", "group": "Cluster_2", "loci": {"18S": ch_18s, "HSP70": ch_hsp, "COWP": ch_cowp_2, "gp60": ch_gp60_ia}},
-        {"id": "CH_DC_03", "group": "Cluster_2", "loci": {"18S": ch_18s, "HSP70": ch_hsp, "COWP": ch_cowp_2, "gp60": ch_gp60_ia_snp}},
-        {"id": "CH_DC_04", "group": "Cluster_2", "loci": {"18S": ch_18s, "HSP70": ch_hsp, "COWP": ch_cowp_2, "gp60": ch_gp60_ia}},
+        {"id": "CH_DC_01", "group": "Cluster_2", "loci": {"18S": ch_18s, "HSP70": ch_hsp, "COWP": ch_cowp_1, "gp60": ch_gp60_ia}},
+        {"id": "CH_DC_02", "group": "Cluster_2", "loci": {"18S": ch_18s, "HSP70": ch_hsp, "COWP": ch_cowp_1, "gp60": ch_gp60_ia}},
+        {"id": "CH_DC_03", "group": "Cluster_2", "loci": {"18S": ch_18s, "HSP70": ch_hsp, "COWP": ch_cowp_1, "gp60": ch_gp60_ia_snp}},
+        {"id": "CH_DC_04", "group": "Cluster_2", "loci": {"18S": ch_18s, "HSP70": ch_hsp, "COWP": ch_cowp_1, "gp60": ch_gp60_ia}},
         {"id": "CH_DC_05", "group": "Cluster_2", "loci": {"18S": ch_18s, "HSP70": ch_hsp, "gp60": ch_gp60_ia}},
-        {"id": "CH_DC_06", "group": "Cluster_2", "loci": {"18S": ch_18s, "COWP": ch_cowp_2, "gp60": ch_gp60_ia}},
+        {"id": "CH_DC_06", "group": "Cluster_2", "loci": {"18S": ch_18s, "COWP": ch_cowp_1, "gp60": ch_gp60_ia}},
 
         {"id": "CP_DF_01", "group": "Cluster_3", "loci": {"18S": cp_18s, "HSP70": cp_hsp, "COWP": cp_cowp, "gp60": cp_gp60}},
         {"id": "CP_DF_02", "group": "Cluster_3", "loci": {"18S": cp_18s, "HSP70": cp_hsp, "COWP": cp_cowp, "gp60": cp_gp60}},
