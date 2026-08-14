@@ -99,6 +99,7 @@ def main():
     dist_parser.add_argument("--wibs", action="store_true", help="Compute KING-robust Weighted IBS matrix instead of Barratt ensemble")
     dist_parser.add_argument("--metric", choices=["wibs", "ensemble", "snp-wibs"], default=None, help="Distance metric to compute")
     dist_parser.add_argument("--ploidy", type=int, default=None, help="Organism base ploidy (e.g. 1 for haploid Cryptosporidium/bacteria, 2 for diploid)")
+    dist_parser.add_argument("-f", "--fasta", help="Optional path to reference or learned FASTA file for sequence-weighted SNP-wIBS distance")
     dist_parser.add_argument("--min-completeness", type=float, default=0.10, help="Minimum locus completeness fraction (default: 0.10)")
 
     # Command 4: cluster
@@ -177,7 +178,7 @@ def main():
         if args.metric == "wibs" or args.wibs:
             res_df = engine.compute_revised_wibs_matrix(df)
         elif args.metric == "snp-wibs":
-            res_df = engine.compute_snp_weighted_wibs_matrix(df)
+            res_df = engine.compute_snp_weighted_wibs_matrix(df, fasta_path=args.fasta)
         else:
             res_df = engine.compute_ensemble_matrix(df)
         out_path = args.output_matrix or "distance_matrix.csv"

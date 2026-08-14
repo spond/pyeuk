@@ -113,15 +113,27 @@ class PyEukDistanceEngine:
 
         marker_cols = [c for c in df.columns if c != "Seq_ID"]
 
-        # Calculate specimen completeness (fraction of non-empty calls)
-        specimen_calls = (df[marker_cols] == "X").sum(axis=1)
-        max_possible = len(marker_cols)
-        completeness = specimen_calls / max_possible
+        # Group marker columns by locus window
+        locus_to_cols = {}
+        for col in marker_cols:
+            loc = parse_locus_name(col)
+            locus_to_cols.setdefault(loc, []).append(col)
+
+        nloci = len(locus_to_cols)
+        if nloci > 0:
+            # Specimen has a locus called if at least one allele column in that locus has 'X'
+            locus_called_counts = np.zeros(len(df), dtype=int)
+            for loc, cols in locus_to_cols.items():
+                loc_has_call = (df[cols] == "X").any(axis=1).values
+                locus_called_counts += loc_has_call.astype(int)
+            completeness = locus_called_counts / float(nloci)
+        else:
+            completeness = np.ones(len(df))
 
         eligible_mask = completeness >= self.min_completeness
         cleandata = df[eligible_mask].copy()
 
-        print(f"[PyEuk] Filtered dataset: {len(cleandata)} / {len(df)} specimens passed completeness criteria.")
+        print(f"[PyEuk] Filtered dataset: {len(cleandata)} / {len(df)} specimens passed completeness criteria (min_locus_completeness >= {self.min_completeness}).")
         return cleandata
 
     def compute_revised_wibs_matrix(self, df: pd.DataFrame) -> pd.DataFrame:
@@ -311,7 +323,7 @@ class PyEukDistanceEngine:
                     weighted_scores.append(loc_d * w_loc)
                     weight_sum += w_loc
 
-                mean_dist = float(sum(weighted_scores) / weight_sum) if weight_sum > 0 else 0.0
+                mean_dist = float(sum(weighted_scores) / weight_sum) if weight_sum > 0.0 else 1.0
                 dist_mat[i, j] = mean_dist
                 dist_mat[j, i] = mean_dist
 

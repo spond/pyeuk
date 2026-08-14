@@ -456,6 +456,32 @@ class TestCyclosporaPyEuk(unittest.TestCase):
             with self.assertRaises(ValueError):
                 generate_haplotype_sheet(specimen_dir=spec_dir, background_dir=bg_dir)
 
+    def test_locus_completeness_invariant_to_unused_allele_columns(self):
+        """
+        Adversarial test for gpt-5.6-sol finding:
+        Specimen locus completeness must measure the fraction of called loci, NOT allele-column density.
+        Adding 100 unused allele columns to the sheet must not alter locus completeness or filter out valid specimens.
+        """
+        from cyclospora_pyeuk.distance_engine import PyEukDistanceEngine
+        
+        # Specimen called at all 4 loci (1 allele each out of 4 columns)
+        df_base = pd.DataFrame([
+            {"Seq_ID": "SPEC_01", "18S_H01": "X", "HSP70_H01": "X", "COWP_H01": "X", "gp60_H01": "X"}
+        ])
+        
+        # Expanded schema with 100 unused population allele columns across the 4 loci
+        df_expanded = df_base.copy()
+        for loc in ["18S", "HSP70", "COWP", "gp60"]:
+            for a in range(2, 27):
+                df_expanded[f"{loc}_H{a:02d}"] = ""
+                
+        # Total columns = 100 + 1 (Seq_ID). Allele column density would be 4 / 100 = 0.04 (< 0.50)
+        # But true locus completeness is 4 / 4 = 1.0 (>= 0.50)
+        engine = PyEukDistanceEngine(min_completeness=0.50)
+        clean_df = engine.process_haplotype_sheet(df_expanded)
+        self.assertEqual(len(clean_df), 1)
+        self.assertEqual(clean_df.iloc[0]["Seq_ID"], "SPEC_01")
+
     def test_fetch_bioproject_cohort_strictly_validates_accessions(self):
         """
         Adversarial test for Finding 4:
