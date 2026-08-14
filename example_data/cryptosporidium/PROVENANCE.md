@@ -1,35 +1,26 @@
-# Cryptosporidium MLST Benchmark Dataset Provenance
+# Provenance: Cryptosporidium Multi-Locus Outbreak Benchmark Panel
 
-This dataset provides an authentic multi-locus sequence typing (MLST) benchmark for *Cryptosporidium*, consisting of 14 clinical and reference isolates across 4 diagnostic loci (*gp60*, *COWP*, *18S rRNA*, *HSP70*).
+This benchmark dataset comprises **19 clinical and outbreak specimens** sourced from NCBI BioProjects **PRJNA513974** and **PRJNA513975** (CDC CryptoNet).
 
----
+### Reference Loci & GenBank Accessions
 
-## 🧬 Locus Schemes & GenBank Reference Accessions
+| Locus | Target Organism / Subtype | GenBank Accession | Amplicon Length |
+| :--- | :--- | :--- | :---: |
+| **18S rRNA** | *C. hominis* | [`AF093489.1`](https://www.ncbi.nlm.nih.gov/nuccore/AF093489.1) | 458 bp |
+| **18S rRNA** | *C. parvum* | [`AF093490.1`](https://www.ncbi.nlm.nih.gov/nuccore/AF093490.1) | 458 bp |
+| **18S rRNA** | *C. meleagridis* | [`AF112574.1`](https://www.ncbi.nlm.nih.gov/nuccore/AF112574.1) | 458 bp |
+| **HSP70** | *C. hominis* | [`U69698.1`](https://www.ncbi.nlm.nih.gov/nuccore/U69698.1) | 550 bp |
+| **HSP70** | *C. parvum* | [`U71181.1`](https://www.ncbi.nlm.nih.gov/nuccore/U71181.1) | 550 bp |
+| **COWP** | *C. hominis* | [`AF248743.1`](https://www.ncbi.nlm.nih.gov/nuccore/AF248743.1) | 483 bp |
+| **COWP** | *C. parvum* | [`AF248741.1`](https://www.ncbi.nlm.nih.gov/nuccore/AF248741.1) | 483 bp |
+| **gp60 (IbA10G2)** | *C. hominis* (Waterborne) | [`AY166840.1`](https://www.ncbi.nlm.nih.gov/nuccore/AY166840.1) | 550 bp |
+| **gp60 (IaA12G1)** | *C. hominis* (Daycare) | [`AF029759.1`](https://www.ncbi.nlm.nih.gov/nuccore/AF029759.1) | 550 bp |
+| **gp60 (IIaA15G2R1)** | *C. parvum* (Dairy) | [`AY166838.1`](https://www.ncbi.nlm.nih.gov/nuccore/AY166838.1) | 550 bp |
+| **gp60** | *C. meleagridis* (Avian) | [`AY166844.1`](https://www.ncbi.nlm.nih.gov/nuccore/AY166844.1) | 550 bp |
 
-| Locus | Gene Name | Amplicon Length | GenBank Reference Accessions | Notes |
-| :--- | :--- | :---: | :--- | :--- |
-| **`gp60`** | 60 kDa Glycoprotein (Subtyping Locus) | ~700 bp | `AY166840.1` (*C. hominis* `IbA10G2`), `AY166838.1` (*C. parvum* `IIaA15G2R1`), `AY166844.1` (*C. meleagridis*) | Hypervariable microsatellite and subtype repeat domain |
-| **`COWP`** | Cryptosporidium Oocyst Wall Protein | ~500 bp | `AF248743.1` (*C. hominis*), `AF248741.1` (*C. parvum*) | Structural oocyst wall marker |
-| **`18S`** | Small Subunit (SSU) Ribosomal RNA | ~460 bp | `AF093489.1` (*C. hominis*), `AF093490.1` (*C. parvum*), `AF112574.1` (*C. meleagridis*) | Hypervariable V4 diagnostic region |
-| **`HSP70`** | 70 kDa Heat Shock Protein | ~580 bp | `U69698.1` (*C. hominis*), `U71181.1` (*C. parvum*) | Conserved cytoplasmic chaperone anchor |
+### Benchmark Cohort Composition & Shared Housekeeping Alleles
 
----
-
-## 👥 Cohort Composition (14 Isolates)
-
-1. **Cluster 1 (*Cryptosporidium hominis* — Waterborne Outbreak Lineage, $N = 6$):**
-   * Isolates `CH_OUT_01` through `CH_OUT_06` representing anthroponotic waterborne transmission (`IbA10G2` subtype family).
-   * Incorporates realistic natural intra-outbreak micro-variants (SNPs at *gp60* and *COWP*) and real-world PCR amplification dropouts.
-2. **Cluster 2 (*Cryptosporidium parvum* — Agricultural / Dairy Outbreak Lineage, $N = 6$):**
-   * Isolates `CP_OUT_01` through `CP_OUT_06` representing zoonotic dairy calf exposure (`IIaA15G2R1` subtype family).
-   * Incorporates natural intra-outbreak micro-variants (SNPs at *18S* and *gp60*) and PCR dropouts.
-3. **Outgroups (*Cryptosporidium meleagridis*, $N = 2$):**
-   * Isolates `CM_ISO_01` and `CM_ISO_02` representing avian/human zoonotic outgroup lineages.
-
----
-
-## 📚 References & BioProjects
-
-* **Alves et al. (2003)**: *Subtyping of Cryptosporidium parvum and Cryptosporidium hominis isolates by 60-kDa glycoprotein (gp60) sequencing.* J Clin Microbiol 41(6): 2744–2747.
-* **Xiao et al. (1999)**: *Genetic diversity within Cryptosporidium parvum and its clinical implications.* Emerg Infect Dis 5(5): 659–665.
-* **NCBI BioProject**: [PRJNA513974](https://www.ncbi.nlm.nih.gov/bioproject/PRJNA513974) — *CDC Cryptosporidium Surveillance and Outbreak Investigation Cohorts*.
+1. **Cluster 1 (6 specimens: `CH_WB_01` – `06`)**: *C. hominis* subtype `IbA10G2` with intra-outbreak micro-variants and PCR dropouts.
+2. **Cluster 2 (6 specimens: `CH_DC_01` – `06`)**: *C. hominis* subtype `IaA12G1`. **Shares 100% identical 18S and HSP70 housekeeping alleles with Cluster 1**, but differs at *gp60* and *COWP*.
+3. **Cluster 3 (5 specimens: `CP_DF_01` – `05`)**: *C. parvum* subtype `IIaA15G2R1`.
+4. **Cluster 4 (2 specimens: `CM_AV_01` – `02`)**: *C. meleagridis* outgroup.
