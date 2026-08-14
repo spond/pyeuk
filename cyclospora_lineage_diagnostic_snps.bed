@@ -1,0 +1,14 @@
+track name="Cyclospora_Lineage_SNPs" description="Cyclospora cayetanensis Lineage-Defining Diagnostic SNPs (Nu_CDS1 & Nu_CDS4)" visibility=2 color=255,140,0 itemRgb="On"
+
+# Genomic / Amplicon Coordinates for Nu_CDS1 & Nu_CDS4 Diagnostic Hotspots
+# Chromosome / Scaffold | Start | End | Feature Name | Score | Strand | ThickStart | ThickEnd | RGB Color
+
+# 1. Nu_CDS1 Locus Window (Nuclear MLST Gene 1)
+scaffold_Nu_CDS1	0	250	Nu_CDS1_Target_Amplicon	1000	+	0	250	70,130,180
+scaffold_Nu_CDS1	45	46	Nu_CDS1_SNP_Pos46_[C->T_Diagnostic]	1000	+	45	46	255,69,0
+scaffold_Nu_CDS1	112	113	Nu_CDS1_SNP_Pos113_[A->G_Diagnostic]	1000	+	112	113	255,69,0
+
+# 2. Nu_CDS4 Locus Window (Nuclear MLST Gene 4)
+scaffold_Nu_CDS4	0	320	Nu_CDS4_Target_Amplicon	1000	+	0	320	70,130,180
+scaffold_Nu_CDS4	88	89	Nu_CDS4_SNP_Pos89_[G->A_Synonymous]	1000	+	88	89	255,69,0
+scaffold_Nu_CDS4	204	205	Nu_CDS4_SNP_Pos205_[T->C_Missense]	1000	+	204	205	255,69,0

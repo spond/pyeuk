@@ -1,0 +1,27 @@
+Seq_ID	Mt_Cmt139.X_Junction_Hap_27	Mt_Cmt154.A_Junction_Hap_3	Mt_Cmt169.X_Junction_Hap_36	Mt_Cmt169.X_Junction_Hap_37	Mt_Cmt199.X_Junction_Hap_22	Mt_Cmt199.X_Junction_Hap_24	Mt_Cmt199.X_Junction_Hap_29	Mt_Cmt214.X_Junction_Hap_25	Mt_Cmt214.X_Junction_Hap_28	Mt_MSR_PART_B_Hap_3	Mt_MSR_PART_E_Hap_3	Nu_360i2_PART_A_Hap_1	Nu_360i2_PART_D_Hap_5	Nu_360i2_PART_D_Hap_6	Nu_378_PART_A_Hap_2	Nu_378_PART_A_Hap_4	Nu_378_PART_D_Hap_10	Nu_CDS1_PART_A_Hap_1	Nu_CDS1_PART_A_Hap_2	Nu_CDS1_PART_A_Hap_3	Nu_CDS1_PART_B_Hap_1	Nu_CDS1_PART_B_Hap_2	Nu_CDS1_PART_B_Hap_3	Nu_CDS1_PART_B_Hap_4	Nu_CDS2_PART_B_Hap_2	Nu_CDS3_PART_A_Hap_5	Nu_CDS3_PART_B_Hap_4	Nu_CDS4_PART_A_Hap_1	Nu_CDS4_PART_A_Hap_2
+ONT_Guat_Endemic_Patzun01							X						X							X				X					
+ONT_Guat_Endemic_Patzun02							X						X							X				X					
+ONT_Guat_Endemic_Solola01					X								X							X				X					
+ONT_Guat_Endemic_Solola02						X								X						X				X					
+ONT_Nepal_Endemic_KTM01								X									X			X								X	
+ONT_Nepal_Endemic_KTM02									X								X			X								X	
+ONT_Nepal_Endemic_Pokhara								X			X									X							X		
+ONT_Nepal_Endemic_Pokhara1								X			X									X							X		
+ONT_Nepal_Endemic_Pokhara2								X			X									X							X		
+ONT_Peru_Endemic_Cusco01			X							X										X			X			X			
+ONT_Peru_Endemic_Cusco02			X							X										X			X			X			
+ONT_Peru_Endemic_Lima01			X													X				X			X		X				
+ONT_Peru_Endemic_Lima02				X												X				X			X		X				
+ONT_Travel_Return_EU_Guat					X								X							X				X					
+ONT_Travel_Return_UK_Peru			X													X				X			X						
+ONT_Travel_Return_US_Nepal								X									X			X								X	
+ONT_US_2025_Clinical_A1	X											X							X			X							X
+ONT_US_2025_Clinical_A2	X											X							X			X							X
+ONT_US_2025_Clinical_A3	X											X							X			X							X
+ONT_US_2025_Clinical_A4	X											X							X			X							X
+ONT_US_2025_Clinical_A5	X											X							X			X							X
+ONT_US_2025_Clinical_B1		X													X			X			X							X	
+ONT_US_2025_Clinical_B2		X													X			X			X							X	
+ONT_US_2025_Clinical_B3		X													X			X			X							X	
+ONT_US_2025_Clinical_B4		X													X			X			X							X	
+ONT_US_2025_Clinical_B5		X													X			X			X							X	

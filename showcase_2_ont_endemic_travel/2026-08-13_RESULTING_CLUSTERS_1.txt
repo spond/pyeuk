@@ -1,0 +1,17 @@
+Seq_ID	Assigned_cluster
+ONT_Guat_Endemic_Patzun01	1
+ONT_Guat_Endemic_Solola01	1
+ONT_Guat_Endemic_Solola02	1
+ONT_Nepal_Endemic_KTM01	1
+ONT_Nepal_Endemic_KTM02	1
+ONT_Nepal_Endemic_Pokhara	1
+ONT_Peru_Endemic_Cusco01	1
+ONT_Peru_Endemic_Lima01	1
+ONT_Peru_Endemic_Lima02	1
+ONT_Travel_Return_EU_Guat	1
+ONT_Travel_Return_UK_Peru	1
+ONT_Travel_Return_US_Nepal	1
+ONT_US_2025_Clinical_A1	1
+ONT_US_2025_Clinical_A2	1
+ONT_US_2025_Clinical_B1	1
+ONT_US_2025_Clinical_B2	1
