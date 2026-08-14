@@ -1,5 +1,9 @@
 # PyEuk: Modern Eukaryotic & Microbial MLST Typing & Outbreak Detection
 
+<p align="center">
+  <img src="docs/images/pyeuk_logo.jpg" alt="PyEuk Logo" width="220"/>
+</p>
+
 [![Version](https://img.shields.io/badge/version-0.3.0-blue.svg)](https://github.com/spond/pyeuk)
 [![Python](https://img.shields.io/badge/python-3.8%2B-green.svg)](https://www.python.org/)
 [![License](https://img.shields.io/badge/license-Apache%202.0-orange.svg)](LICENSE)
