@@ -95,7 +95,9 @@ def main():
     dist_parser.add_argument("-o", "--output-matrix", help="Output path for ensemble distance matrix CSV")
     dist_parser.add_argument("-e", "--epsilon", type=float, default=0.3072, help="Bayesian error rate epsilon")
     dist_parser.add_argument("--wibs", action="store_true", help="Compute KING-robust Weighted IBS matrix instead of Barratt ensemble")
+    dist_parser.add_argument("--metric", choices=["wibs", "ensemble", "snp-wibs"], default=None, help="Distance metric to compute")
     dist_parser.add_argument("--ploidy", type=int, default=None, help="Organism base ploidy (e.g. 1 for haploid Cryptosporidium/bacteria, 2 for diploid)")
+    dist_parser.add_argument("--min-completeness", type=float, default=0.10, help="Minimum locus completeness fraction (default: 0.10)")
 
     # Command 4: cluster
     cluster_parser = subparsers.add_parser("cluster", help="Run Ward AGNES hierarchical clustering (unsupervised or supervised)")
@@ -113,9 +115,12 @@ def main():
     runall_parser.add_argument("-g", "--gold-clusters", required=False, default=None, help="Optional path to gold standard cluster reference list (for supervised mode)")
     runall_parser.add_argument("-o", "--output-dir", default="outbreak_results", help="Output directory for all pipeline artifacts")
     runall_parser.add_argument("--preset", choices=["illumina", "ont-r10", "pacbio-hifi"], default="illumina", help="Sequencing technology preset")
+    runall_parser.add_argument("--metric", choices=["wibs", "ensemble", "snp-wibs"], default=None, help="Distance metric to compute (defaults to wibs for de-novo/ont-r10, ensemble otherwise)")
+    runall_parser.add_argument("-e", "--epsilon", type=float, default=0.3072, help="Bayesian error rate epsilon (default: 0.3072)")
     runall_parser.add_argument("--sra-accession", help="Optional SRA accession (e.g. SRR12345678) to fetch raw data directly")
     runall_parser.add_argument("--de-novo", action="store_true", help="Discover loci and haplotypes de novo without any reference database")
     runall_parser.add_argument("--ploidy", type=int, default=None, help="Organism base ploidy (e.g. 1 for haploid Cryptosporidium/bacteria, 2 for diploid)")
+    runall_parser.add_argument("--min-completeness", type=float, default=0.10, help="Minimum locus completeness fraction (default: 0.10)")
 
     args = parser.parse_args()
 
@@ -146,12 +151,18 @@ def main():
     elif args.command == "eukaryotyping":
         import pandas as pd
         df = pd.read_csv(args.input_sheet, sep="\t")
-        engine = PyEukDistanceEngine(epsilon=args.epsilon, ploidy=args.ploidy)
-        if args.wibs:
+        engine = PyEukDistanceEngine(
+            epsilon=args.epsilon,
+            min_completeness=args.min_completeness,
+            ploidy=args.ploidy
+        )
+        if args.metric == "wibs" or args.wibs:
             res_df = engine.compute_revised_wibs_matrix(df)
+        elif args.metric == "snp-wibs":
+            res_df = engine.compute_snp_weighted_wibs_matrix(df)
         else:
             res_df = engine.compute_ensemble_matrix(df)
-        out_path = args.output_matrix or "ensemble_distance_matrix.csv"
+        out_path = args.output_matrix or "distance_matrix.csv"
         res_df.to_csv(out_path)
         print(f"[CLI] Saved distance matrix to: {out_path}")
 
@@ -181,11 +192,19 @@ def main():
         all_specimens = sheet_df["Seq_ID"].tolist()
 
         print("\n=== STAGE 2: Running PyEuk Distance Engine ===")
-        engine = PyEukDistanceEngine(ploidy=args.ploidy)
-        if args.preset == "ont-r10" or args.de_novo:
+        engine = PyEukDistanceEngine(
+            epsilon=args.epsilon,
+            min_completeness=args.min_completeness,
+            ploidy=args.ploidy
+        )
+        if args.metric == "wibs" or (args.metric is None and (args.preset == "ont-r10" or args.de_novo)):
             print("[DistanceEngine] Using KING-Robust wIBS Distance Engine (PSD Guaranteed)...")
             matrix_df = engine.compute_revised_wibs_matrix(sheet_df)
+        elif args.metric == "snp-wibs":
+            print("[DistanceEngine] Using SNP-Weighted wIBS Distance Engine...")
+            matrix_df = engine.compute_snp_weighted_wibs_matrix(sheet_df, fasta_path=args.assembled_fasta)
         else:
+            print("[DistanceEngine] Using Plucinski-Barratt Ensemble Distance Engine (PSD Guaranteed)...")
             matrix_df = engine.compute_ensemble_matrix(sheet_df)
         matrix_df.to_csv(matrix_path)
 
@@ -195,7 +214,7 @@ def main():
 
         print("\n==================================================")
         print("SUCCESS: Pipeline complete!")
-        print(f"- Ensemble Distance Matrix: {matrix_path}")
+        print(f"- Distance Matrix: {matrix_path}")
         print(f"- Outbreak Clusters: {args.output_dir}")
         print("==================================================")
 

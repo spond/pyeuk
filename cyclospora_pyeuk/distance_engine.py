@@ -4,17 +4,50 @@ Re-engineered from original CDC High Sierra ALPHA release.
 """
 
 import os
+import re
 import numpy as np
 import pandas as pd
 from typing import Tuple, List, Dict, Optional, Union
 from numba import njit, prange
 
 
+def parse_locus_name(col: str) -> str:
+    """
+    Extracts the homologous locus window name from a marker or haplotype identifier.
+    Correctly handles:
+    - CDC format: Nu_378_PART_A_Hap_4 -> Nu_378_PART_A
+    - De novo format: gp60_L752bp.H01_9180 -> gp60
+    - Haplotype delimiters: _Hap_\d+, .H\d+, _H\d+, _NOVEL_\d+, .X_\d+
+    - Preserves locus names with underscores like Cp_HSP70, Cp_HSP90
+    - Strips amplicon length tags like _L245bp
+    """
+    sub = str(col).strip()
+    patterns = [
+        r"_Hap_\d+",
+        r"\.H\d+(_[A-F0-9]+)?",
+        r"_H\d+(_[A-F0-9]+)?",
+        r"_(NOVEL|novel)_\d+",
+        r"\.X_\d+",
+    ]
+    for pat in patterns:
+        sub = re.sub(pat, "", sub)
+    sub = re.sub(r"_L\d+bp$", "", sub)
+    sub = sub.rstrip("_")
+    if "Junction" in sub or ("Mt_" in sub and "Cmt" in sub):
+        return "Mt_Cmt"
+    return sub
+
+
 @njit(parallel=True, fastmath=True)
-def _fast_numba_wibs(X: np.ndarray, w_j: np.ndarray, locus_mask: np.ndarray) -> np.ndarray:
+def _fast_numba_wibs(
+    X: np.ndarray,
+    w_j: np.ndarray,
+    locus_mask: np.ndarray,
+    locus_ploidy: np.ndarray
+) -> np.ndarray:
     """
     Numba JIT C-kernel for KING-robust Weighted Identity-By-State (wIBS) pairwise distance computation
-    with pairwise-complete locus dropout handling.
+    with pairwise-complete locus dropout handling and locus-specific ploidy normalization.
 
     Parameters
     ----------
@@ -24,6 +57,8 @@ def _fast_numba_wibs(X: np.ndarray, w_j: np.ndarray, locus_mask: np.ndarray) -> 
         KING standardization weight 1 / sqrt(p_j * (1 - p_j)).
     locus_mask : np.ndarray (n_samples, n_markers)
         Boolean mask indicating if the marker belongs to a locus window called in specimen i.
+    locus_ploidy : np.ndarray (n_markers,)
+        Base ploidy per marker locus (e.g. 1.0 for haploid, 2.0 for diploid).
     """
     nids, n_markers = X.shape
     D_wibs = np.zeros((nids, nids))
@@ -39,7 +74,7 @@ def _fast_numba_wibs(X: np.ndarray, w_j: np.ndarray, locus_mask: np.ndarray) -> 
                 if valid_markers[k]:
                     wk = w_j[k]
                     weight_sum += wk
-                    diff = abs(X[i, k] - X[j, k])
+                    diff = abs(X[i, k] - X[j, k]) / locus_ploidy[k]
                     weighted_diff += diff * wk
 
             if weight_sum > 0.0:
@@ -102,19 +137,18 @@ class PyEukDistanceEngine:
         X = (clean_df[marker_cols].values == "X").astype(np.float64)
 
         # Map marker columns to locus windows
-        def get_locus_name(col):
-            sub = col
-            for sep in ["_Hap_", ".H", "_H", "_NOVEL_", "_novel_", ".X_"]:
-                if sep in sub:
-                    sub = sub.split(sep)[0]
-                    break
-            import re
-            sub = re.sub(r"_L\d+bp$", "", sub)
-            if "Junction" in sub or ("Mt_" in sub and "Cmt" in sub):
-                return "Mt_Cmt"
-            return sub
+        locus_names = [parse_locus_name(c) for c in marker_cols]
 
-        locus_names = [get_locus_name(c) for c in marker_cols]
+        def get_loc_ploidy(loc_name: str) -> float:
+            if self.ploidy is None:
+                return 1.0 if loc_name.startswith("Mt") else 2.0
+            elif isinstance(self.ploidy, (int, float)):
+                return float(self.ploidy)
+            elif isinstance(self.ploidy, dict):
+                return float(self.ploidy.get(loc_name, 2.0))
+            return 2.0
+
+        locus_ploidy = np.array([get_loc_ploidy(name) for name in locus_names], dtype=np.float64)
 
         # Determine locus call status per specimen (locus_mask: True if specimen has >=1 allele called in locus window)
         locus_mask = np.zeros_like(X, dtype=bool)
@@ -143,7 +177,7 @@ class PyEukDistanceEngine:
 
         # Parallel Numba execution
         print(f"[PyEuk-wIBS] Executing Numba JIT C-kernel on {nids} specimens across {len(unique_loci)} locus windows...")
-        D_wibs = _fast_numba_wibs(X, w_j, locus_mask)
+        D_wibs = _fast_numba_wibs(X, w_j, locus_mask, locus_ploidy)
 
         # Exact Positive Semi-Definite (PSD) projection via Gram Matrix double centering
         H = np.eye(nids) - np.ones((nids, nids)) / float(nids)
@@ -224,15 +258,7 @@ class PyEukDistanceEngine:
         # Group marker columns by locus window
         locus_map = {}
         for col in marker_cols:
-            loc = col
-            for sep in ["_Hap_", ".H", "_H", "_NOVEL_", "_novel_", ".X_"]:
-                if sep in loc:
-                    loc = loc.split(sep)[0]
-                    break
-            import re
-            loc = re.sub(r"_L\d+bp$", "", loc)
-            if "Junction" in loc or ("Mt_" in loc and "Cmt" in loc):
-                loc = "Mt_Cmt"
+            loc = parse_locus_name(col)
             locus_map.setdefault(loc, []).append(col)
 
         # Calculate KING locus weights based on population marker allele frequencies
@@ -307,10 +333,12 @@ class PyEukDistanceEngine:
 
     def compute_ensemble_matrix(self, df: pd.DataFrame) -> pd.DataFrame:
         """
-        Computes the dual-ensemble matrix (Barratt Heuristic + Plucinski Bayesian LLR Rank Integration).
+        Computes the dual-ensemble matrix (Barratt Heuristic + Plucinski Bayesian LLR Rank Integration)
+        with exact Gram matrix PSD projection.
         """
         clean_df = self.process_haplotype_sheet(df)
         ids, loci_data, ploidy = self._extract_locus_data(clean_df)
+        nids = len(ids)
 
         print(f"[PyEuk] Computing Barratt's Heuristic Distance...")
         D_heur = self.compute_heuristic_distance(ids, loci_data)
@@ -321,6 +349,20 @@ class PyEukDistanceEngine:
         print(f"[PyEuk] Performing Uniform Fractional Rank Integration...")
         D_ensemble = self.rank_integrate(D_heur, D_bayes)
 
+        # Exact Positive Semi-Definite (PSD) projection via Gram Matrix double centering
+        if nids > 2:
+            H = np.eye(nids) - np.ones((nids, nids)) / float(nids)
+            G = -0.5 * H @ (D_ensemble ** 2) @ H
+            evals, evecs = np.linalg.eigh(G)
+            evals_clipped = np.maximum(evals, 0.0)
+            G_psd = evecs @ np.diag(evals_clipped) @ evecs.T
+            diag_g = np.diag(G_psd)
+            D_sq = np.clip(diag_g[:, None] + diag_g[None, :] - 2.0 * G_psd, 0.0, None)
+            D_psd = np.sqrt(D_sq)
+            D_psd = (D_psd + D_psd.T) / 2.0
+            np.fill_diagonal(D_psd, 0.0)
+            D_ensemble = D_psd
+
         return pd.DataFrame(D_ensemble, index=ids, columns=ids)
 
     def _extract_locus_data(self, df: pd.DataFrame) -> Tuple[List[str], List[Dict], np.ndarray]:
@@ -328,29 +370,17 @@ class PyEukDistanceEngine:
         nids = len(ids)
         marker_cols = [c for c in df.columns if c != "Seq_ID"]
 
-        def get_locus_name(col):
-            sub = col
-            for sep in ["_Hap_", ".H", "_H", "_NOVEL_", "_novel_", ".X_"]:
-                if sep in sub:
-                    sub = sub.split(sep)[0]
-                    break
-            import re
-            sub = re.sub(r"_L\d+bp$", "", sub)
-            if "Junction" in sub or ("Mt_" in sub and "Cmt" in sub):
-                return "Mt_Cmt"
-            return sub
-
         locus_names = []
         for col in marker_cols:
-            loc = get_locus_name(col)
+            loc = parse_locus_name(col)
             if loc not in locus_names:
                 locus_names.append(loc)
 
         nloci = len(locus_names)
         if self.ploidy is None:
             ploidy = np.array([1 if loc.startswith("Mt") else 2 for loc in locus_names])
-        elif isinstance(self.ploidy, int):
-            ploidy = np.full(nloci, self.ploidy)
+        elif isinstance(self.ploidy, (int, float)):
+            ploidy = np.full(nloci, int(self.ploidy))
         elif isinstance(self.ploidy, dict):
             ploidy = np.array([self.ploidy.get(loc, 2) for loc in locus_names])
         else:
@@ -358,7 +388,7 @@ class PyEukDistanceEngine:
 
         loci_data = []
         for j, loc in enumerate(locus_names):
-            loc_cols = [c for c in marker_cols if get_locus_name(c) == loc]
+            loc_cols = [c for c in marker_cols if parse_locus_name(c) == loc]
             sub = df[loc_cols].values == "X"
             alleles = loc_cols
             nalleles = len(alleles)

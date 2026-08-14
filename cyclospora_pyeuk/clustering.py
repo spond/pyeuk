@@ -238,22 +238,22 @@ class CyclosporaClusterFinder:
                 sorted_gaps = sorted(gap_scores, key=lambda x: x[1], reverse=True)
                 tree_height = float(heights[0]) if len(heights) > 0 else 1.0
                 
-                # Minimum cluster size guard: at least 10% of samples or min 5 specimens
-                min_required_size = max(5, int(0.10 * n_samples))
-                
+                # Adaptive minimum cluster size guard: min 2 for small cohorts, up to 5 for surveillance scale
+                min_required_size = max(2, min(5, int(0.10 * n_samples)))
+
                 valid_k_found = False
                 for candidate in sorted_gaps:
                     cand_k, cand_gap, h_curr, h_next = candidate
                     cand_rel_gap = (cand_gap / tree_height) if tree_height > 0 else 0.0
-                    
+
                     if cand_rel_gap < 0.2200:
                         break  # Remaining gap scores are below scale-free noise floor
-                        
+
                     # Check cluster size distribution for candidate k
                     cand_ids = cut_tree(Z, n_clusters=cand_k).ravel()
                     cluster_counts = np.bincount(cand_ids)
                     min_c_size = int(np.min(cluster_counts))
-                    
+
                     if min_c_size >= min_required_size:
                         correct_k = cand_k
                         max_gap = cand_gap
@@ -274,9 +274,18 @@ class CyclosporaClusterFinder:
                 threshold = self.default_threshold
 
             cluster_ids = cut_tree(Z, n_clusters=correct_k).ravel()
+
+            # Deterministic lexicographical tie-breaking and label ordering (Cluster 1 contains lexicographically smallest specimen)
+            unique_cids = []
+            for sid, cid in sorted(zip(samples, cluster_ids), key=lambda x: x[0]):
+                if cid not in unique_cids:
+                    unique_cids.append(cid)
+            label_remap = {old_cid: new_idx + 1 for new_idx, old_cid in enumerate(unique_cids)}
+            remapped_ids = np.array([label_remap[cid] for cid in cluster_ids])
+
             best_cluster_df = pd.DataFrame({
                 "Seq_ID": samples,
-                "Assigned_cluster": cluster_ids + 1
+                "Assigned_cluster": remapped_ids
             })
 
         # Transparently append low-completeness / excluded specimens if provided

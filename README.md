@@ -176,12 +176,12 @@ print(f"Detected {k} outbreak clusters across {len(clusters_df)} specimens.")
 | :--- | :--- | :---: | :---: | :---: | :--- |
 | **CDC Outbreak Benchmark** | *Cyclospora cayetanensis* | 153 | **$k = 2$** | **0.9721** | 99.1% sensitivity, 98.1% specificity against gold standard |
 | **Expanded Surveillance Cohort** | *Cyclospora cayetanensis* | 203 | **$k = 2$** | **1.0000** | Perfect 1-to-1 recovery of multi-state outbreaks |
-| **CDC CryptoNet Outbreak Panel** | *Cryptosporidium hominis/parvum* | 14 | **$k = 2$** | **1.0000** | 100% concordance separating waterborne vs dairy outbreaks |
-| **Giardia MLST Benchmark** | *Giardia duodenalis* | 14 | **$k = 2$** | **1.0000** | 100% concordance separating Assemblage A from Assemblage B |
-| **De Novo Reference-Free Run** | *Cyclospora cayetanensis* | 12 | **$k = 2$** | **1.0000** | 100% concordance with 0 reference database guidance |
+| **Cryptosporidium MLST Panel** | *Cryptosporidium hominis/parvum* | 14 | **$k = 3$** | **1.0000** | 100% concordance across *C. hominis*, *C. parvum*, and *C. meleagridis* ([`PROVENANCE.md`](example_data/cryptosporidium/PROVENANCE.md)) |
+| **Giardia MLST Benchmark** | *Giardia duodenalis* | 14 | **$k = 2$** | **1.0000** | 100% concordance separating Assemblage A from Assemblage B ([`PROVENANCE.md`](example_data/giardia/PROVENANCE.md)) |
+| **De Novo Reference-Free Run** | *Cyclospora cayetanensis* | 11 | **$k = 2$** | **1.0000** | 100% concordance with 0 reference database guidance |
 
 * **Speedup**: Distance matrix computation on $N = 1,078$ national surveillance specimens drops from **24.6 minutes to 14.9 seconds** (99.2× faster).
-* **Metric Validity**: Gram matrix PSD projection ensures $\lambda_{\min} \ge 0.0$, eliminating distorted hierarchical tree geometries.
+* **Metric Validity**: Gram matrix PSD projection guarantees $\lambda_{\min} \ge 0.0$ across both wIBS and Ensemble distance matrices, eliminating distorted hierarchical tree geometries.
 
 ---
 

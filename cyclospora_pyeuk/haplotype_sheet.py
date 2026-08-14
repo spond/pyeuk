@@ -235,7 +235,7 @@ def generate_haplotype_sheet_from_assemblies(
     if output_path is None:
         today_str = datetime.date.today().strftime("%Y-%m-%d")
         os.makedirs("haplotype_sheets", exist_ok=True)
-        output_path = os.path.join("haplotype_sheets", f"{today_str}_Cyclospora_haplotype_data_sheet.txt")
+        output_path = os.path.join("haplotype_sheets", f"{today_str}_haplotype_data_sheet.txt")
     else:
         os.makedirs(os.path.dirname(output_path) or ".", exist_ok=True)
 
@@ -478,7 +478,7 @@ def learn_de_novo_haplotypes(
     if output_path is None:
         today_str = datetime.date.today().strftime("%Y-%m-%d")
         os.makedirs("haplotype_sheets", exist_ok=True)
-        output_path = os.path.join("haplotype_sheets", f"{today_str}_DeNovo_Cyclospora_haplotype_data_sheet.txt")
+        output_path = os.path.join("haplotype_sheets", f"{today_str}_DeNovo_haplotype_data_sheet.txt")
     else:
         os.makedirs(os.path.dirname(output_path) or ".", exist_ok=True)
 
@@ -508,7 +508,11 @@ def generate_haplotype_sheet(
     """
     if de_novo:
         target = assembled_fasta or specimen_dir
-        sheet_df, _ = learn_de_novo_haplotypes(target, output_path=output_path)
+        output_fasta = None
+        if output_path:
+            out_dir = os.path.dirname(output_path) or "."
+            output_fasta = os.path.join(out_dir, "learned_refs.fasta")
+        sheet_df, _ = learn_de_novo_haplotypes(target, output_path=output_path, output_fasta=output_fasta)
         return sheet_df
 
     # If assembled_fasta is explicitly passed or specimen_dir is a FASTA file/folder of fastas
@@ -617,7 +621,7 @@ def generate_haplotype_sheet(
     if output_path is None:
         today_str = datetime.date.today().strftime("%Y-%m-%d")
         os.makedirs("haplotype_sheets", exist_ok=True)
-        output_path = os.path.join("haplotype_sheets", f"{today_str}_Cyclospora_haplotype_data_sheet.txt")
+        output_path = os.path.join("haplotype_sheets", f"{today_str}_haplotype_data_sheet.txt")
 
     genotype_sheet.to_csv(output_path, sep="\t", index=False)
     print(f"[HaplotypeSheet] Successfully generated haplotype sheet ({len(sorted_samples)} specimens, {len(sorted_markers)} markers) at: {output_path}")
