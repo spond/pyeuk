@@ -64,13 +64,15 @@ def fetch_test_data(target_dir: str = "./cdc_reference_data"):
 
 def main():
     parser = argparse.ArgumentParser(
-        description="CDC Cyclospora cayetanensis MLST Genotyping & Eukaryotyping Workflow (v0.3.0)"
+        prog="pyeuk",
+        description="PyEuk: High-Performance Molecular Typing, Genetic Distance Estimation, and Outbreak Clustering for Eukaryotic and Microbial Pathogens (Cyclospora, Cryptosporidium, MLST, cgMLST)",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
     )
-    subparsers = parser.add_subparsers(dest="command", help="Available subcommands")
+    subparsers = parser.add_subparsers(dest="command", help="Available sub-commands")
 
     # Command 0: fetch-test-data
-    fetch_parser = subparsers.add_parser("fetch-test-data", help="Fetch and unpack official CDC benchmark test data automatically")
-    fetch_parser.add_argument("-o", "--output-dir", default="./cdc_reference_data", help="Target directory for benchmark dataset")
+    fetch_parser = subparsers.add_parser("fetch-test-data", help="Fetch validated public surveillance benchmark dataset")
+    fetch_parser.add_argument("-o", "--output-dir", default="test_data", help="Directory to save test dataset")
 
     # Command 1: generate-sheet
     sheet_parser = subparsers.add_parser("generate-sheet", help="Generate binary presence/absence haplotype sheet (supports .zip, BLAST calls, or assembled FASTA)")
@@ -93,11 +95,12 @@ def main():
     dist_parser.add_argument("-o", "--output-matrix", help="Output path for ensemble distance matrix CSV")
     dist_parser.add_argument("-e", "--epsilon", type=float, default=0.3072, help="Bayesian error rate epsilon")
     dist_parser.add_argument("--wibs", action="store_true", help="Compute KING-robust Weighted IBS matrix instead of Barratt ensemble")
+    dist_parser.add_argument("--ploidy", type=int, default=None, help="Organism base ploidy (e.g. 1 for haploid Cryptosporidium/bacteria, 2 for diploid)")
 
     # Command 4: cluster
     cluster_parser = subparsers.add_parser("cluster", help="Run Ward AGNES hierarchical clustering (unsupervised or supervised)")
     cluster_parser.add_argument("-m", "--matrix", required=True, help="Path to ensemble distance matrix CSV")
-    cluster_parser.add_argument("-g", "--gold-clusters", required=False, default=None, help="Optional path to 2018 gold standard cluster reference list (for supervised mode)")
+    cluster_parser.add_argument("-g", "--gold-clusters", required=False, default=None, help="Optional path to gold standard cluster reference list (for supervised mode)")
     cluster_parser.add_argument("-o", "--output-dir", default="outbreak_clusters", help="Output directory for resulting clusters")
     cluster_parser.add_argument("-s", "--stringency", type=float, default=95.0, help="Target threshold coverage percentage")
     cluster_parser.add_argument("--robust", action="store_true", default=True, help="Use robust Median + 3*MAD threshold calibration")
@@ -107,11 +110,12 @@ def main():
     runall_parser.add_argument("-s", "--specimen-dir", help="Directory or .zip file containing specimen genotype BLAST files or FASTA contigs")
     runall_parser.add_argument("-a", "--assembled-fasta", help="Directory or FASTA file containing externally assembled haplotype contigs")
     runall_parser.add_argument("-b", "--background-dir", help="Directory or .zip file containing background reference genotype files")
-    runall_parser.add_argument("-g", "--gold-clusters", required=False, default=None, help="Optional path to 2018 gold standard cluster reference list (for supervised mode)")
-    runall_parser.add_argument("-o", "--output-dir", default="cyclospora_output", help="Output directory for all pipeline artifacts")
+    runall_parser.add_argument("-g", "--gold-clusters", required=False, default=None, help="Optional path to gold standard cluster reference list (for supervised mode)")
+    runall_parser.add_argument("-o", "--output-dir", default="outbreak_results", help="Output directory for all pipeline artifacts")
     runall_parser.add_argument("--preset", choices=["illumina", "ont-r10", "pacbio-hifi"], default="illumina", help="Sequencing technology preset")
     runall_parser.add_argument("--sra-accession", help="Optional SRA accession (e.g. SRR12345678) to fetch raw data directly")
     runall_parser.add_argument("--de-novo", action="store_true", help="Discover loci and haplotypes de novo without any reference database")
+    runall_parser.add_argument("--ploidy", type=int, default=None, help="Organism base ploidy (e.g. 1 for haploid Cryptosporidium/bacteria, 2 for diploid)")
 
     args = parser.parse_args()
 
@@ -142,7 +146,7 @@ def main():
     elif args.command == "eukaryotyping":
         import pandas as pd
         df = pd.read_csv(args.input_sheet, sep="\t")
-        engine = PyEukDistanceEngine(epsilon=args.epsilon)
+        engine = PyEukDistanceEngine(epsilon=args.epsilon, ploidy=args.ploidy)
         if args.wibs:
             res_df = engine.compute_revised_wibs_matrix(df)
         else:
@@ -177,9 +181,9 @@ def main():
         all_specimens = sheet_df["Seq_ID"].tolist()
 
         print("\n=== STAGE 2: Running PyEuk Distance Engine ===")
-        engine = PyEukDistanceEngine()
-        if args.preset == "ont-r10":
-            print("[CLI Preset] Using Oxford Nanopore (ONT-R10.4.1) KING-Robust wIBS Distance Engine...")
+        engine = PyEukDistanceEngine(ploidy=args.ploidy)
+        if args.preset == "ont-r10" or args.de_novo:
+            print("[DistanceEngine] Using KING-Robust wIBS Distance Engine (PSD Guaranteed)...")
             matrix_df = engine.compute_revised_wibs_matrix(sheet_df)
         else:
             matrix_df = engine.compute_ensemble_matrix(sheet_df)

@@ -6,7 +6,7 @@ Re-engineered from original CDC High Sierra ALPHA release.
 import os
 import numpy as np
 import pandas as pd
-from typing import Tuple, List, Dict, Optional
+from typing import Tuple, List, Dict, Optional, Union
 from numba import njit, prange
 
 
@@ -59,9 +59,15 @@ class PyEukDistanceEngine:
     and KING-Robust Weighted Identity-By-State (wIBS) with exact Gram matrix PSD projection.
     """
 
-    def __init__(self, epsilon: float = 0.3072, min_completeness: float = 0.10):
+    def __init__(
+        self,
+        epsilon: float = 0.3072,
+        min_completeness: float = 0.10,
+        ploidy: Optional[Union[int, Dict[str, int]]] = None
+    ):
         self.epsilon = epsilon
         self.min_completeness = min_completeness
+        self.ploidy = ploidy
 
     def process_haplotype_sheet(self, df: pd.DataFrame) -> pd.DataFrame:
         """
@@ -341,7 +347,14 @@ class PyEukDistanceEngine:
                 locus_names.append(loc)
 
         nloci = len(locus_names)
-        ploidy = np.array([1 if loc.startswith("Mt") else 2 for loc in locus_names])
+        if self.ploidy is None:
+            ploidy = np.array([1 if loc.startswith("Mt") else 2 for loc in locus_names])
+        elif isinstance(self.ploidy, int):
+            ploidy = np.full(nloci, self.ploidy)
+        elif isinstance(self.ploidy, dict):
+            ploidy = np.array([self.ploidy.get(loc, 2) for loc in locus_names])
+        else:
+            ploidy = np.array([1 if loc.startswith("Mt") else 2 for loc in locus_names])
 
         loci_data = []
         for j, loc in enumerate(locus_names):

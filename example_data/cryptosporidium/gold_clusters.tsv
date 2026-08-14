@@ -1,0 +1,15 @@
+Seq_ID	True_Cluster
+CH_MN_01	C_hominis_Waterborne
+CH_MN_02	C_hominis_Waterborne
+CH_MN_03	C_hominis_Waterborne
+CH_AL_01	C_hominis_Waterborne
+CH_AL_02	C_hominis_Waterborne
+CH_AL_03	C_hominis_Waterborne
+CP_WI_01	C_parvum_DairyZoonotic
+CP_WI_02	C_parvum_DairyZoonotic
+CP_IOWA_01	C_parvum_DairyZoonotic
+CP_IOWA_02	C_parvum_DairyZoonotic
+CP_MN_01	C_parvum_DairyZoonotic
+CP_MN_02	C_parvum_DairyZoonotic
+C_MELE_01	Outgroup
+C_UBIQ_01	Outgroup

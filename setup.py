@@ -16,7 +16,9 @@ setup(
     ],
     entry_points={
         "console_scripts": [
+            "pyeuk=cyclospora_pyeuk.cli:main",
             "cyclospora-typing=cyclospora_pyeuk.cli:main",
         ],
     },
 )
+
