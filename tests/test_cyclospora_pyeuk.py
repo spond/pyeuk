@@ -133,6 +133,32 @@ class TestCyclosporaPyEuk(unittest.TestCase):
             if os.path.exists(temp_path):
                 os.remove(temp_path)
 
+    def test_example_data_pipeline(self):
+        """Tests that the example_data directory works across standard, zip, and de novo modes."""
+        from cyclospora_pyeuk.haplotype_sheet import generate_haplotype_sheet, learn_de_novo_haplotypes
+        from cyclospora_pyeuk.distance_engine import PyEukDistanceEngine
+        from cyclospora_pyeuk.clustering import CyclosporaClusterFinder
+
+        # 1. Test from directory
+        sheet_dir = generate_haplotype_sheet("example_data/specimens")
+        self.assertEqual(len(sheet_dir), 11)
+
+        # 2. Test from zip
+        sheet_zip = generate_haplotype_sheet("example_data/specimens.zip")
+        self.assertEqual(len(sheet_zip), 11)
+
+        # 3. Test de novo from FASTA contigs
+        sheet_dn, learned = learn_de_novo_haplotypes("example_data/cohort_contigs.fasta")
+        self.assertEqual(len(sheet_dn), 11)
+        self.assertGreater(len(learned), 20)
+
+        # 4. Test clustering on de novo sheet
+        engine = PyEukDistanceEngine(min_completeness=0.0)
+        wibs = engine.compute_revised_wibs_matrix(sheet_dn)
+        finder = CyclosporaClusterFinder()
+        clusters, k, _ = finder.find_clusters(wibs, gold_file_path="example_data/gold_clusters.tsv")
+        self.assertEqual(k, 2)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -39,6 +39,10 @@ tests/out_clusters/
 data/
 outbreak_results/
 cdc_reference_data/
+clusters_detected/
+haplotype_sheets/
+results/
+cyclospora_output/
 cyclospora_audit_report.*
 *.log
 *.aux

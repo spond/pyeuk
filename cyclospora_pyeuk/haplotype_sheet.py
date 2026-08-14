@@ -536,7 +536,8 @@ def generate_haplotype_sheet(
                                 is_fasta_dir = True
                             with zf.open(member) as f:
                                 content = f.read().decode('utf-8', errors='ignore')
-                                file_map[basename] = content
+                                sample_id = os.path.splitext(basename)[0]
+                                file_map[sample_id] = content
             except Exception as e:
                 print(f"[HaplotypeSheet Warning] Could not read zip archive {path}: {e}")
             return
@@ -557,14 +558,16 @@ def generate_haplotype_sheet(
                                             is_fasta_dir = True
                                         with zf.open(member) as f:
                                             content = f.read().decode('utf-8', errors='ignore')
-                                            file_map[basename] = content
+                                            sample_id = os.path.splitext(basename)[0]
+                                            file_map[sample_id] = content
                         except Exception as e:
                             print(f"[HaplotypeSheet Warning] Could not read zip {fpath}: {e}")
                     elif not fname.startswith(".") and not fname.endswith(".pdf") and not fname.endswith(".sh"):
                         try:
                             with open(fpath, 'r', encoding='utf-8', errors='ignore') as f:
                                 content = f.read()
-                                file_map[fname] = content
+                                sample_id = os.path.splitext(fname)[0]
+                                file_map[sample_id] = content
                         except Exception as e:
                             pass
 

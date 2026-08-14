@@ -45,19 +45,20 @@ pip install -e .
 
 ## ⚡ Quickstart
 
-### 1. Run Complete Pipeline on Genotype Calls
+### 1. Run Pipeline on Specimen Genotype Calls
 ```bash
-# Process specimen call files or .zip archives and detect outbreak clusters
+# Run on directory of specimen call files (or .zip archive)
 cyclospora-typing run-all \
-    -s ./specimens_dir_or_zip \
+    -s example_data/specimens \
+    -g example_data/gold_clusters.tsv \
     -o ./outbreak_results
 ```
 
 ### 2. Ingest Assembled FASTA Contigs (Reference-Free De Novo)
 ```bash
-# Ingest external FASTA assemblies and discover haplotypes de novo
+# Ingest FASTA contigs and discover haplotypes reference-free
 cyclospora-typing run-all \
-    -a ./assembled_contigs.fasta \
+    -a example_data/cohort_contigs.fasta \
     --de-novo \
     -o ./de_novo_results
 ```
@@ -65,7 +66,7 @@ cyclospora-typing run-all \
 ### 3. Modular Step-by-Step CLI Commands
 ```bash
 # Step 1: Generate binary presence/absence haplotype sheet
-cyclospora-typing generate-sheet -s ./specimens -o haplotype_sheet.txt
+cyclospora-typing generate-sheet -s example_data/specimens -o haplotype_sheet.txt
 
 # Step 2: Compute pairwise KING-wIBS distance matrix
 cyclospora-typing eukaryotyping -i haplotype_sheet.txt -o distance_matrix.csv --wibs
@@ -87,11 +88,11 @@ from cyclospora_pyeuk import (
     CyclosporaClusterFinder
 )
 
-# 1. Option A: Ingest standard genotype calls
-sheet_df = generate_haplotype_sheet("specimens_dir_or_zip.zip")
+# 1. Option A: Ingest standard genotype calls (or specimens.zip)
+sheet_df = generate_haplotype_sheet("example_data/specimens")
 
 # 1. Option B: Discover haplotypes reference-free from assembled FASTA contigs
-# sheet_df, learned_refs = learn_de_novo_haplotypes("cohort_assemblies.fasta")
+# sheet_df, learned_refs = learn_de_novo_haplotypes("example_data/cohort_contigs.fasta")
 
 # 2. Compute KING-wIBS distance matrix (robust to dropouts)
 engine = PyEukDistanceEngine()
