@@ -211,14 +211,10 @@ class TestCyclosporaPyEuk(unittest.TestCase):
         ids, loci_data, ploidy = engine._extract_locus_data(df)
         d_bayes = engine.compute_bayesian_distance(ids, loci_data, ploidy)
 
-        # Exact pinned Bayesian distance values
+        # Exact pinned Bayesian distance values kill reversed mapping (which produces 1.227273)
         np.testing.assert_allclose(d_bayes[0, 1], 0.772727, rtol=1e-4)
         np.testing.assert_allclose(d_bayes[0, 2], 1.552873, rtol=1e-4)
         self.assertLess(d_bayes[0, 1], d_bayes[0, 2])
-
-        # Assert reversed mapping mutant (d_b = 2.0*P[2] + 1.0*P[1] + 0.0*P[0]) diverges significantly
-        d12_mut = 2.0 - 0.772727 # 1.227273
-        self.assertNotAlmostEqual(float(d_bayes[0, 1]), d12_mut, places=2)
 
     def test_ploidy_differentiation(self):
         """Tests that ploidy=1, ploidy=2, and locus-specific ploidy produce distinct, mathematically valid matrices."""
