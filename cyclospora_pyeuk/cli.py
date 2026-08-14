@@ -73,10 +73,12 @@ def main():
     fetch_parser.add_argument("-o", "--output-dir", default="./cdc_reference_data", help="Target directory for benchmark dataset")
 
     # Command 1: generate-sheet
-    sheet_parser = subparsers.add_parser("generate-sheet", help="Generate binary presence/absence haplotype sheet (supports .zip files)")
-    sheet_parser.add_argument("-s", "--specimen-dir", required=True, help="Directory or .zip file containing specimen genotype files")
+    sheet_parser = subparsers.add_parser("generate-sheet", help="Generate binary presence/absence haplotype sheet (supports .zip, BLAST calls, or assembled FASTA)")
+    sheet_parser.add_argument("-s", "--specimen-dir", help="Directory or .zip file containing specimen genotype BLAST files or FASTA contigs")
+    sheet_parser.add_argument("-a", "--assembled-fasta", help="Directory or FASTA file containing externally assembled haplotype contigs")
     sheet_parser.add_argument("-b", "--background-dir", help="Directory or .zip file containing background reference genotype files")
     sheet_parser.add_argument("-o", "--output", help="Output path for haplotype data sheet TSV")
+    sheet_parser.add_argument("--de-novo", action="store_true", help="Discover loci and haplotypes de novo without any reference database")
 
     # Command 2: process-ont
     ont_parser = subparsers.add_parser("process-ont", help="Process Oxford Nanopore (ONT) amplicon FASTQ files")
@@ -102,12 +104,14 @@ def main():
 
     # Command 5: run-all
     runall_parser = subparsers.add_parser("run-all", help="Execute complete pipeline (Sheet Generation -> Distance Matrix -> Clustering)")
-    runall_parser.add_argument("-s", "--specimen-dir", required=True, help="Directory or .zip file containing specimen genotype BLAST files")
+    runall_parser.add_argument("-s", "--specimen-dir", help="Directory or .zip file containing specimen genotype BLAST files or FASTA contigs")
+    runall_parser.add_argument("-a", "--assembled-fasta", help="Directory or FASTA file containing externally assembled haplotype contigs")
     runall_parser.add_argument("-b", "--background-dir", help="Directory or .zip file containing background reference genotype files")
     runall_parser.add_argument("-g", "--gold-clusters", required=False, default=None, help="Optional path to 2018 gold standard cluster reference list (for supervised mode)")
     runall_parser.add_argument("-o", "--output-dir", default="cyclospora_output", help="Output directory for all pipeline artifacts")
     runall_parser.add_argument("--preset", choices=["illumina", "ont-r10", "pacbio-hifi"], default="illumina", help="Sequencing technology preset")
     runall_parser.add_argument("--sra-accession", help="Optional SRA accession (e.g. SRR12345678) to fetch raw data directly")
+    runall_parser.add_argument("--de-novo", action="store_true", help="Discover loci and haplotypes de novo without any reference database")
 
     args = parser.parse_args()
 
@@ -119,7 +123,17 @@ def main():
         fetch_test_data(args.output_dir)
 
     elif args.command == "generate-sheet":
-        generate_haplotype_sheet(args.specimen_dir, args.background_dir, args.output)
+        input_target = args.assembled_fasta or args.specimen_dir
+        if not input_target:
+            print("[Error] Please specify either -s/--specimen-dir or -a/--assembled-fasta")
+            sys.exit(1)
+        generate_haplotype_sheet(
+            specimen_dir=input_target,
+            background_dir=args.background_dir,
+            output_path=args.output,
+            assembled_fasta=args.assembled_fasta,
+            de_novo=args.de_novo
+        )
 
     elif args.command == "process-ont":
         processor = NanoporeAmpliconProcessor(min_qscore=args.qscore)
@@ -149,7 +163,17 @@ def main():
         matrix_path = os.path.join(args.output_dir, "ensemble_distance_matrix.csv")
 
         print("=== STAGE 1: Generating Haplotype Sheet ===")
-        sheet_df = generate_haplotype_sheet(args.specimen_dir, args.background_dir, sheet_path)
+        input_target = args.assembled_fasta or args.specimen_dir
+        if not input_target:
+            print("[Error] Please specify either -s/--specimen-dir or -a/--assembled-fasta for run-all")
+            sys.exit(1)
+        sheet_df = generate_haplotype_sheet(
+            specimen_dir=input_target,
+            background_dir=args.background_dir,
+            output_path=sheet_path,
+            assembled_fasta=args.assembled_fasta,
+            de_novo=args.de_novo
+        )
         all_specimens = sheet_df["Seq_ID"].tolist()
 
         print("\n=== STAGE 2: Running PyEuk Distance Engine ===")

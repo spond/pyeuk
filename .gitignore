@@ -34,6 +34,11 @@ Complete_Cyclospora_typing_workflow_MacOS_High_Sierra_ALPHA_TEST/
 bench_run_output/
 sra_12_trial_output/
 test_ont_sra_output/
+test_downloads/
+tests/out_clusters/
+data/
+outbreak_results/
+cdc_reference_data/
 cyclospora_audit_report.*
 *.log
 *.aux

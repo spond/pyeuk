@@ -97,7 +97,13 @@ class PyEukDistanceEngine:
 
         # Map marker columns to locus windows
         def get_locus_name(col):
-            sub = col.split("_Hap_")[0]
+            sub = col
+            for sep in ["_Hap_", ".H", "_H", "_NOVEL_", "_novel_", ".X_"]:
+                if sep in sub:
+                    sub = sub.split(sep)[0]
+                    break
+            import re
+            sub = re.sub(r"_L\d+bp$", "", sub)
             if "Junction" in sub or ("Mt_" in sub and "Cmt" in sub):
                 return "Mt_Cmt"
             return sub
@@ -212,7 +218,15 @@ class PyEukDistanceEngine:
         # Group marker columns by locus window
         locus_map = {}
         for col in marker_cols:
-            loc = col.split("_Hap_")[0]
+            loc = col
+            for sep in ["_Hap_", ".H", "_H", "_NOVEL_", "_novel_", ".X_"]:
+                if sep in loc:
+                    loc = loc.split(sep)[0]
+                    break
+            import re
+            loc = re.sub(r"_L\d+bp$", "", loc)
+            if "Junction" in loc or ("Mt_" in loc and "Cmt" in loc):
+                loc = "Mt_Cmt"
             locus_map.setdefault(loc, []).append(col)
 
         # Calculate KING locus weights based on population marker allele frequencies
@@ -309,7 +323,13 @@ class PyEukDistanceEngine:
         marker_cols = [c for c in df.columns if c != "Seq_ID"]
 
         def get_locus_name(col):
-            sub = col.split("_Hap_")[0]
+            sub = col
+            for sep in ["_Hap_", ".H", "_H", "_NOVEL_", "_novel_", ".X_"]:
+                if sep in sub:
+                    sub = sub.split(sep)[0]
+                    break
+            import re
+            sub = re.sub(r"_L\d+bp$", "", sub)
             if "Junction" in sub or ("Mt_" in sub and "Cmt" in sub):
                 return "Mt_Cmt"
             return sub

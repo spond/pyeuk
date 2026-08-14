@@ -75,8 +75,68 @@ class TestCyclosporaPyEuk(unittest.TestCase):
         self.assertEqual(snp_df.shape[0], snp_df.shape[1])
         np.testing.assert_allclose(np.diag(snp_df.values), 0.0, atol=1e-6)
 
+    def test_external_assembly_ingestion(self):
+        import tempfile
+        from cyclospora_pyeuk.haplotype_sheet import generate_haplotype_sheet_from_assemblies
+
+        # Create temporary FASTA with mock assembled contigs
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".fasta", delete=False) as f:
+            f.write(">Sample_01|Nu_378_PART_A_Hap_1\nATGCGATCGATCGATCGATCGATCGATCGA\n")
+            f.write(">Sample_01|Nu_360i2_PART_A_Hap_1\nCGATCGATCGATCGATCGATCGATCGATCG\n")
+            f.write(">Sample_02|Nu_378_PART_A_Hap_1\nATGCGATCGATCGATCGATCGATCGATCGA\n")
+            temp_path = f.name
+
+        try:
+            sheet_df = generate_haplotype_sheet_from_assemblies(
+                assembled_input=temp_path,
+                output_path="tests/out_clusters/mock_assembled_sheet.txt"
+            )
+            self.assertIsInstance(sheet_df, pd.DataFrame)
+            self.assertIn("Seq_ID", sheet_df.columns)
+            self.assertEqual(len(sheet_df), 2)
+        finally:
+            if os.path.exists(temp_path):
+                os.remove(temp_path)
+
+    def test_de_novo_haplotype_discovery(self):
+        import tempfile
+        from cyclospora_pyeuk.haplotype_sheet import learn_de_novo_haplotypes
+
+        # Create temporary FASTA without any predefined references
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".fasta", delete=False) as f:
+            # Sample 1 has alleles at Locus_A and Locus_B
+            f.write(">Patient_1|Locus_A\nATGCGATCGATCGATCGATCGATCGATCGA\n")
+            f.write(">Patient_1|Locus_B\nTTTTGGGGCCCCAAAATTTTGGGGCCCCAAAA\n")
+            # Sample 2 shares Locus_A allele but has a novel Locus_A variant (co-infection)
+            f.write(">Patient_2|Locus_A\nATGCGATCGATCGATCGATCGATCGATCGA\n")
+            f.write(">Patient_2|Locus_A\nATGCGATCGATCGATCGATCGATCGATCGTT\n")
+            # Sample 3 only has Locus_B
+            f.write(">Patient_3|Locus_B\nTTTTGGGGCCCCAAAATTTTGGGGCCCCAAAA\n")
+            temp_path = f.name
+
+        out_tsv = "tests/out_clusters/de_novo_sheet.txt"
+        out_fa = "tests/out_clusters/de_novo_refs.fasta"
+
+        try:
+            sheet_df, learned_dict = learn_de_novo_haplotypes(
+                assembled_input=temp_path,
+                output_path=out_tsv,
+                output_fasta=out_fa
+            )
+            self.assertIsInstance(sheet_df, pd.DataFrame)
+            self.assertEqual(len(sheet_df), 3)
+            self.assertIn("Seq_ID", sheet_df.columns)
+            self.assertGreater(len(learned_dict), 0)
+            self.assertTrue(os.path.exists(out_tsv))
+            self.assertTrue(os.path.exists(out_fa))
+        finally:
+            if os.path.exists(temp_path):
+                os.remove(temp_path)
+
 
 if __name__ == "__main__":
     unittest.main()
+
+
 
 
