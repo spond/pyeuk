@@ -86,6 +86,8 @@ def main():
     ont_parser = subparsers.add_parser("process-ont", help="Process Oxford Nanopore (ONT) amplicon FASTQ files")
     ont_parser.add_argument("-i", "--input-fastq", required=True, help="Input ONT FASTQ read file")
     ont_parser.add_argument("-s", "--sample-id", required=True, help="Sample identifier")
+    ont_parser.add_argument("-r", "--reference-fasta", help="Path to reference MLST FASTA database")
+    ont_parser.add_argument("--de-novo", action="store_true", help="Perform de novo consensus haplotype discovery from reads")
     ont_parser.add_argument("-o", "--output-dir", default="ont_genotypes", help="Output directory for ONT haplotype calls")
     ont_parser.add_argument("--qscore", type=float, default=10.0, help="Minimum Q-score threshold (default: 10.0)")
 
@@ -145,8 +147,24 @@ def main():
         )
 
     elif args.command == "process-ont":
+        ref_db = {}
+        if args.reference_fasta:
+            if not os.path.exists(args.reference_fasta):
+                print(f"[Error] Reference FASTA file not found: {args.reference_fasta}", file=sys.stderr)
+                sys.exit(1)
+            from cyclospora_pyeuk.haplotype_sheet import parse_fasta
+            ref_db = parse_fasta(args.reference_fasta)
+        elif not args.de_novo:
+            default_ref = os.path.join(os.path.dirname(__file__), "..", "references", "cyclopora_mlst_references.fasta")
+            if os.path.exists(default_ref):
+                from cyclospora_pyeuk.haplotype_sheet import parse_fasta
+                ref_db = parse_fasta(default_ref)
+            else:
+                print("[Error] process-ont requires a reference database. Please specify -r/--reference-fasta or --de-novo.", file=sys.stderr)
+                sys.exit(1)
+
         processor = NanoporeAmpliconProcessor(min_qscore=args.qscore)
-        processor.match_ont_haplotypes(args.sample_id, args.input_fastq, {}, args.output_dir)
+        processor.match_ont_haplotypes(args.sample_id, args.input_fastq, ref_db, args.output_dir)
 
     elif args.command == "eukaryotyping":
         import pandas as pd

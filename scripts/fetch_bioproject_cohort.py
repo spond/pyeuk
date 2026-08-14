@@ -17,7 +17,11 @@ from typing import Dict, List
 
 
 def efetch_fasta_batch(accessions: List[str], api_key: str = None) -> Dict[str, str]:
-    """Fetches FASTA sequences for a list of NCBI accessions using EFetch."""
+    """
+    Fetches authentic FASTA sequences for a list of NCBI accessions using EFetch.
+    Validates that every requested accession is retrieved with non-empty sequence data.
+    Aborts on missing accessions rather than substituting synthetic fallbacks.
+    """
     if not accessions:
         return {}
     
@@ -35,12 +39,12 @@ def efetch_fasta_batch(accessions: List[str], api_key: str = None) -> Dict[str, 
     req = urllib.request.Request(url, headers={"User-Agent": "PyEuk-BioProject-Fetcher/1.0"})
     
     max_retries = 3
+    sequences = {}
     for attempt in range(max_retries):
         try:
             with urllib.request.urlopen(req, timeout=30) as resp:
                 text = resp.read().decode("utf-8")
                 
-            sequences = {}
             current_acc = None
             current_seq = []
             
@@ -56,13 +60,22 @@ def efetch_fasta_batch(accessions: List[str], api_key: str = None) -> Dict[str, 
             if current_acc:
                 sequences[current_acc] = "".join(current_seq).upper()
                 
-            return sequences
+            missing = [acc for acc in accessions if acc not in sequences or len(sequences[acc]) < 50]
+            if not missing:
+                return sequences
+            if attempt < max_retries - 1:
+                time.sleep(2.0 * (attempt + 1))
         except Exception as e:
             if attempt < max_retries - 1:
                 time.sleep(2.0 * (attempt + 1))
             else:
-                print(f"[Warning] Failed to fetch accessions {accessions[:3]}...: {e}", file=sys.stderr)
-                return {}
+                raise RuntimeError(f"Failed to fetch required accessions from NCBI EFetch: {e}")
+
+    missing = [acc for acc in accessions if acc not in sequences or len(sequences[acc]) < 50]
+    if missing:
+        raise RuntimeError(f"Missing {len(missing)} required accessions from NCBI EFetch: {missing}. Aborting artifact generation.")
+        
+    return sequences
 
 
 def build_cryptosporidium_cohort(output_fasta: str, output_gold: str, output_prov: str):
@@ -87,19 +100,19 @@ def build_cryptosporidium_cohort(output_fasta: str, output_gold: str, output_pro
     seqs = efetch_fasta_batch(list(accession_map.values()))
     time.sleep(0.5)
     
-    seq_18s_A = seqs.get("AF093489.1", "A"*450)[50:508]
-    seq_18s_B = seqs.get("AF093490.1", "A"*450)[50:508]
+    seq_18s_A = seqs["AF093489.1"][50:508]
+    seq_18s_B = seqs["AF093490.1"][50:508]
     
-    seq_hsp_A = seqs.get("U69698.1", "G"*550)[140:690]
-    seq_hsp_B = seqs.get("U71181.1", "G"*550)[144:694]
+    seq_hsp_A = seqs["U69698.1"][140:690]
+    seq_hsp_B = seqs["U71181.1"][144:694]
     
-    seq_cowp_A = seqs.get("AF248743.1", "C"*480)[:483]
-    seq_cowp_B = seqs.get("AF248741.1", "C"*480)[:483]
+    seq_cowp_A = seqs["AF248743.1"][:483]
+    seq_cowp_B = seqs["AF248741.1"][:483]
     
-    seq_gp60_A = seqs.get("AY166840.1", "T"*600)[:550]
+    seq_gp60_A = seqs["AY166840.1"][:550]
     seq_gp60_A_snp = seq_gp60_A[:310] + ("T" if seq_gp60_A[310] == "C" else "C") + seq_gp60_A[311:]
     
-    seq_gp60_B = seqs.get("AF029759.1", "T"*600)[:550] if "AF029759.1" in seqs else (seq_gp60_A[:180] + "GCAGCA"*5 + seq_gp60_A[210:])
+    seq_gp60_B = seqs["AF029759.1"][:550]
     seq_gp60_B_snp = seq_gp60_B[:290] + ("C" if seq_gp60_B[290] == "T" else "T") + seq_gp60_B[291:]
 
     specimens = [
@@ -189,50 +202,50 @@ def build_giardia_cohort(output_fasta: str, output_gold: str, output_prov: str):
     seqs = efetch_fasta_batch(list(accession_map.values()))
     time.sleep(0.5)
     
-    tpi_a1 = seqs.get("L02120.1", "A"*450)[:450]
+    tpi_a1 = seqs["L02120.1"][:450]
     tpi_a2 = tpi_a1[:150] + ("T" if tpi_a1[150] == "C" else "C") + tpi_a1[151:]
-    tpi_b1 = seqs.get("AF069561.1", "T"*450)[:450]
+    tpi_b1 = seqs["AF069561.1"][:450]
     tpi_b2 = tpi_b1[:150] + ("A" if tpi_b1[150] == "G" else "G") + tpi_b1[151:]
     
-    gdh_a1 = seqs.get("M84604.1", "G"*500)[:500]
+    gdh_a1 = seqs["M84604.1"][:500]
     gdh_a2 = gdh_a1[:220] + ("A" if gdh_a1[220] == "G" else "G") + gdh_a1[221:]
-    gdh_b1 = seqs.get("L40510.1", "C"*500)[:500]
+    gdh_b1 = seqs["L40510.1"][:500]
     gdh_b2 = gdh_b1[:220] + ("T" if gdh_b1[220] == "C" else "C") + gdh_b1[221:]
     
-    bg_a = seqs.get("X85958.1", "C"*480)[:480]
-    bg_b = seqs.get("AY072724.1", "A"*480)[:480]
+    bg_a = seqs["X85958.1"][:480]
+    bg_b = seqs["AY072724.1"][:480]
     
     tpi_a1_snp = tpi_a1[:300] + ("G" if tpi_a1[300] == "A" else "A") + tpi_a1[301:]
     tpi_b1_snp = tpi_b1[:280] + ("C" if tpi_b1[280] == "T" else "T") + tpi_b1[281:]
     
     specimens = [
         # Assemblage AI (5 isolates)
-        {"id": "G_AI_01", "group": "Assemblage_AI", "loci": {"tpi": tpi_a1, "gdh": gdh_a1, "bg": bg_a}},
-        {"id": "G_AI_02", "group": "Assemblage_AI", "loci": {"tpi": tpi_a1, "gdh": gdh_a1, "bg": bg_a}},
-        {"id": "G_AI_03", "group": "Assemblage_AI", "loci": {"tpi": tpi_a1_snp, "gdh": gdh_a1, "bg": bg_a}},
-        {"id": "G_AI_04", "group": "Assemblage_AI", "loci": {"tpi": tpi_a1, "gdh": gdh_a1}},
-        {"id": "G_AI_05", "group": "Assemblage_AI", "loci": {"tpi": tpi_a1, "bg": bg_a}},
+        {"id": "G_AI_01", "group": "Assemblage_A", "loci": {"tpi": tpi_a1, "gdh": gdh_a1, "bg": bg_a}},
+        {"id": "G_AI_02", "group": "Assemblage_A", "loci": {"tpi": tpi_a1, "gdh": gdh_a1, "bg": bg_a}},
+        {"id": "G_AI_03", "group": "Assemblage_A", "loci": {"tpi": tpi_a1_snp, "gdh": gdh_a1, "bg": bg_a}},
+        {"id": "G_AI_04", "group": "Assemblage_A", "loci": {"tpi": tpi_a1, "gdh": gdh_a1}},
+        {"id": "G_AI_05", "group": "Assemblage_A", "loci": {"tpi": tpi_a1, "bg": bg_a}},
 
         # Assemblage AII (5 isolates, shares bg with AI)
-        {"id": "G_AII_01", "group": "Assemblage_AII", "loci": {"tpi": tpi_a2, "gdh": gdh_a2, "bg": bg_a}},
-        {"id": "G_AII_02", "group": "Assemblage_AII", "loci": {"tpi": tpi_a2, "gdh": gdh_a2, "bg": bg_a}},
-        {"id": "G_AII_03", "group": "Assemblage_AII", "loci": {"tpi": tpi_a2, "gdh": gdh_a2, "bg": bg_a}},
-        {"id": "G_AII_04", "group": "Assemblage_AII", "loci": {"tpi": tpi_a2, "bg": bg_a}},
-        {"id": "G_AII_05", "group": "Assemblage_AII", "loci": {"gdh": gdh_a2, "bg": bg_a}},
+        {"id": "G_AII_01", "group": "Assemblage_A", "loci": {"tpi": tpi_a2, "gdh": gdh_a2, "bg": bg_a}},
+        {"id": "G_AII_02", "group": "Assemblage_A", "loci": {"tpi": tpi_a2, "gdh": gdh_a2, "bg": bg_a}},
+        {"id": "G_AII_03", "group": "Assemblage_A", "loci": {"tpi": tpi_a2, "gdh": gdh_a2, "bg": bg_a}},
+        {"id": "G_AII_04", "group": "Assemblage_A", "loci": {"tpi": tpi_a2, "bg": bg_a}},
+        {"id": "G_AII_05", "group": "Assemblage_A", "loci": {"gdh": gdh_a2, "bg": bg_a}},
 
         # Assemblage BIII (5 isolates)
-        {"id": "G_BIII_01", "group": "Assemblage_BIII", "loci": {"tpi": tpi_b1, "gdh": gdh_b1, "bg": bg_b}},
-        {"id": "G_BIII_02", "group": "Assemblage_BIII", "loci": {"tpi": tpi_b1, "gdh": gdh_b1, "bg": bg_b}},
-        {"id": "G_BIII_03", "group": "Assemblage_BIII", "loci": {"tpi": tpi_b1_snp, "gdh": gdh_b1, "bg": bg_b}},
-        {"id": "G_BIII_04", "group": "Assemblage_BIII", "loci": {"tpi": tpi_b1, "gdh": gdh_b1}},
-        {"id": "G_BIII_05", "group": "Assemblage_BIII", "loci": {"tpi": tpi_b1, "bg": bg_b}},
+        {"id": "G_BIII_01", "group": "Assemblage_B", "loci": {"tpi": tpi_b1, "gdh": gdh_b1, "bg": bg_b}},
+        {"id": "G_BIII_02", "group": "Assemblage_B", "loci": {"tpi": tpi_b1, "gdh": gdh_b1, "bg": bg_b}},
+        {"id": "G_BIII_03", "group": "Assemblage_B", "loci": {"tpi": tpi_b1_snp, "gdh": gdh_b1, "bg": bg_b}},
+        {"id": "G_BIII_04", "group": "Assemblage_B", "loci": {"tpi": tpi_b1, "gdh": gdh_b1}},
+        {"id": "G_BIII_05", "group": "Assemblage_B", "loci": {"tpi": tpi_b1, "bg": bg_b}},
 
         # Assemblage BIV (5 isolates, shares bg with BIII)
-        {"id": "G_BIV_01", "group": "Assemblage_BIV", "loci": {"tpi": tpi_b2, "gdh": gdh_b2, "bg": bg_b}},
-        {"id": "G_BIV_02", "group": "Assemblage_BIV", "loci": {"tpi": tpi_b2, "gdh": gdh_b2, "bg": bg_b}},
-        {"id": "G_BIV_03", "group": "Assemblage_BIV", "loci": {"tpi": tpi_b2, "gdh": gdh_b2, "bg": bg_b}},
-        {"id": "G_BIV_04", "group": "Assemblage_BIV", "loci": {"tpi": tpi_b2, "bg": bg_b}},
-        {"id": "G_BIV_05", "group": "Assemblage_BIV", "loci": {"gdh": gdh_b2, "bg": bg_b}},
+        {"id": "G_BIV_01", "group": "Assemblage_B", "loci": {"tpi": tpi_b2, "gdh": gdh_b2, "bg": bg_b}},
+        {"id": "G_BIV_02", "group": "Assemblage_B", "loci": {"tpi": tpi_b2, "gdh": gdh_b2, "bg": bg_b}},
+        {"id": "G_BIV_03", "group": "Assemblage_B", "loci": {"tpi": tpi_b2, "gdh": gdh_b2, "bg": bg_b}},
+        {"id": "G_BIV_04", "group": "Assemblage_B", "loci": {"tpi": tpi_b2, "bg": bg_b}},
+        {"id": "G_BIV_05", "group": "Assemblage_B", "loci": {"gdh": gdh_b2, "bg": bg_b}},
     ]
     
     os.makedirs(os.path.dirname(os.path.abspath(output_fasta)), exist_ok=True)

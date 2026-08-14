@@ -10,12 +10,9 @@ This benchmark dataset comprises **20 clinical and veterinary isolates** sourced
 | **gdh** | Assemblage A / B | [`M84604.1`](https://www.ncbi.nlm.nih.gov/nuccore/M84604.1) / [`L40510.1`](https://www.ncbi.nlm.nih.gov/nuccore/L40510.1) | 500 bp |
 | **bg** | Assemblage A / B | [`X85958.1`](https://www.ncbi.nlm.nih.gov/nuccore/X85958.1) / [`AY072724.1`](https://www.ncbi.nlm.nih.gov/nuccore/AY072724.1) | 480 bp |
 
-### Benchmark Cohort Composition & Evaluation Levels
+### Benchmark Cohort Composition
 
-This benchmark dataset evaluates surveillance typing across two biological levels:
-1. **Primary Public Health Target (Major Assemblages, k = 2)**:
-   - **Assemblage A (10 specimens: `G_AI_01`–`05`, `G_AII_01`–`05`)**: Sourced from BioProject PRJNA41819 (WB strain background).
-   - **Assemblage B (10 specimens: `G_BIII_01`–`05`, `G_BIV_01`–`05`)**: Sourced from BioProject PRJNA41821 (GS strain background).
-   - *Result*: PyEuk achieves **ARI = 1.0000** under Ward linkage at $k = 2$.
-2. **Sub-Assemblage Fine Typing (k = 4)**:
-   - Evaluates sub-lineage separation (AI vs AII vs BIII vs BIV). Due to shared *bg* alleles within major assemblages and single-locus PCR dropouts, sub-assemblage level resolution exhibits linkage sensitivity.
+1. **Assemblage AI (5 specimens: `G_AI_01`–`05`)**: Zoonotic strain.
+2. **Assemblage AII (5 specimens: `G_AII_01`–`05`)**: Anthroponotic strain sharing *bg* with AI.
+3. **Assemblage BIII (5 specimens: `G_BIII_01`–`05`)**: Lineage B strain.
+4. **Assemblage BIV (5 specimens: `G_BIV_01`–`05`)**: Lineage B strain sharing *bg* with BIII.

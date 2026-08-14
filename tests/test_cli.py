@@ -67,5 +67,36 @@ class TestPyEukCLI(unittest.TestCase):
         self.assertTrue(os.path.exists(os.path.join(out_dir, "learned_refs.fasta")))
         self.assertTrue(os.path.exists(os.path.join(out_dir, "ensemble_distance_matrix.csv")))
 
+    def test_cli_process_ont_with_reference(self):
+        # Create test FASTQ and test reference FASTA
+        test_ref_fa = os.path.join(self.test_out, "ref.fasta")
+        with open(test_ref_fa, "w") as f:
+            f.write(">L1_H01_TEST\nATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCG\n")
+
+        test_fastq = os.path.join(self.test_out, "reads.fastq")
+        read_seq = "ATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCG" * 5
+        read_qual = "I" * len(read_seq)
+        with open(test_fastq, "w") as f:
+            for i in range(10):
+                f.write(f"@read_{i}\n{read_seq}\n+\n{read_qual}\n")
+
+        ont_out = os.path.join(self.test_out, "ont_out")
+        sys.argv = [
+            "pyeuk", "process-ont",
+            "-i", test_fastq,
+            "-s", "SAMPLE_001",
+            "-r", test_ref_fa,
+            "-o", ont_out,
+            "--qscore", "10.0"
+        ]
+        main()
+        call_file = os.path.join(ont_out, "SAMPLE_001")
+        self.assertTrue(os.path.exists(call_file))
+        import pandas as pd
+        df = pd.read_csv(call_file, sep="\t", header=None)
+        self.assertFalse(df.empty)
+        self.assertEqual(df.iloc[0, 0], "L1_H01_TEST")
+
+
 if __name__ == "__main__":
     unittest.main()

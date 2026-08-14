@@ -12,6 +12,30 @@ import pandas as pd
 from typing import List, Optional, Dict, Tuple
 
 
+def parse_fasta(fasta_path: str) -> Dict[str, str]:
+    """
+    Parses a FASTA file and returns a dictionary mapping sequence headers to uppercase nucleotide sequences.
+    """
+    records = {}
+    if not os.path.exists(fasta_path):
+        raise FileNotFoundError(f"FASTA file not found: {fasta_path}")
+    with open(fasta_path, "r", encoding="utf-8", errors="ignore") as f:
+        cur_header = None
+        seq_lines = []
+        for line in f:
+            line = line.strip()
+            if line.startswith(">"):
+                if cur_header:
+                    records[cur_header] = "".join(seq_lines).upper()
+                cur_header = line[1:].split()[0]
+                seq_lines = []
+            else:
+                seq_lines.append(line)
+        if cur_header:
+            records[cur_header] = "".join(seq_lines).upper()
+    return records
+
+
 def load_reference_haplotypes(ref_dirs: Optional[List[str]] = None) -> Dict[str, str]:
     """
     Loads reference haplotype sequences from reference directory or common paths.
@@ -522,10 +546,11 @@ def generate_haplotype_sheet(
     if specimen_dir.endswith((".fasta", ".fa", ".fna")):
         return generate_haplotype_sheet_from_assemblies(specimen_dir, output_path=output_path)
 
-    file_map: Dict[str, str] = {}
+    specimen_map: Dict[str, str] = {}
+    background_map: Dict[str, str] = {}
     is_fasta_dir = False
 
-    def collect_source(path: str):
+    def collect_source(path: str, target_dict: Dict[str, str], label: str):
         nonlocal is_fasta_dir
         if not path or not os.path.exists(path):
             return
@@ -541,8 +566,12 @@ def generate_haplotype_sheet(
                             with zf.open(member) as f:
                                 content = f.read().decode('utf-8', errors='ignore')
                                 sample_id = os.path.splitext(basename)[0]
-                                file_map[sample_id] = content
+                                if sample_id in target_dict:
+                                    raise ValueError(f"Duplicate sample ID '{sample_id}' detected within {label} archive: {path}")
+                                target_dict[sample_id] = content
             except Exception as e:
+                if isinstance(e, ValueError):
+                    raise
                 print(f"[HaplotypeSheet Warning] Could not read zip archive {path}: {e}")
             return
 
@@ -563,24 +592,38 @@ def generate_haplotype_sheet(
                                         with zf.open(member) as f:
                                             content = f.read().decode('utf-8', errors='ignore')
                                             sample_id = os.path.splitext(basename)[0]
-                                            file_map[sample_id] = content
+                                            if sample_id in target_dict:
+                                                raise ValueError(f"Duplicate sample ID '{sample_id}' detected within {label} archive: {fpath}")
+                                            target_dict[sample_id] = content
                         except Exception as e:
+                            if isinstance(e, ValueError):
+                                raise
                             print(f"[HaplotypeSheet Warning] Could not read zip {fpath}: {e}")
                     elif not fname.startswith(".") and not fname.endswith(".pdf") and not fname.endswith(".sh"):
                         try:
                             with open(fpath, 'r', encoding='utf-8', errors='ignore') as f:
                                 content = f.read()
                                 sample_id = os.path.splitext(fname)[0]
-                                file_map[sample_id] = content
+                                if sample_id in target_dict:
+                                    raise ValueError(f"Duplicate sample ID '{sample_id}' detected within {label} directory: {fpath}")
+                                target_dict[sample_id] = content
                         except Exception as e:
-                            pass
+                            if isinstance(e, ValueError):
+                                raise
 
-    collect_source(specimen_dir)
+    collect_source(specimen_dir, specimen_map, "specimen")
     if background_dir:
-        collect_source(background_dir)
+        collect_source(background_dir, background_map, "background")
+        # Check collision between specimen and background
+        collision = set(specimen_map.keys()) & set(background_map.keys())
+        if collision:
+            raise ValueError(f"Sample ID collision between specimen and background collections: {collision}")
 
-    if not file_map:
-        raise ValueError(f"No genotype files or valid .zip archives found in: {specimen_dir}")
+    if not specimen_map:
+        raise ValueError(f"No genotype files or valid .zip archives found in specimen directory: {specimen_dir}")
+
+    # Primary case cohort is built from specimens (background controls are not emitted as patient case rows)
+    file_map = specimen_map
 
     if is_fasta_dir:
         return generate_haplotype_sheet_from_assemblies(specimen_dir, output_path=output_path)

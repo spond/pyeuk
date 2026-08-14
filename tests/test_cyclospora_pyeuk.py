@@ -405,6 +405,68 @@ class TestCyclosporaPyEuk(unittest.TestCase):
         ari_wibs_ward = adjusted_rand_score(truth, c_wibs_ward)
         self.assertAlmostEqual(ari_wibs_ward, 0.8836, places=2)
 
+    def test_disjoint_locus_coverage_receives_max_distance_and_never_zero(self):
+        """
+        Adversarial test for Finding 1:
+        Specimens with complementary locus dropouts (0 mutually called loci) must receive
+        maximum distance (1.0), NEVER distance 0.0 (genetic identity).
+        """
+        from cyclospora_pyeuk.distance_engine import PyEukDistanceEngine
+        
+        # Specimen 1: only Locus 1 called
+        # Specimen 2: only Locus 2 called (0 overlap with Specimen 1)
+        # Specimen 3: both Locus 1 and Locus 2 called
+        df_disjoint = pd.DataFrame([
+            {"Seq_ID": "SPEC_01", "L1_H01": "X", "L1_H02": "", "L2_H01": "", "L2_H02": ""},
+            {"Seq_ID": "SPEC_02", "L1_H01": "", "L1_H02": "", "L2_H01": "X", "L2_H02": ""},
+            {"Seq_ID": "SPEC_03", "L1_H01": "X", "L1_H02": "", "L2_H01": "X", "L2_H02": ""}
+        ]).fillna("")
+
+        eng = PyEukDistanceEngine(min_completeness=0.0, ploidy=1)
+        
+        # wIBS distance
+        wibs_mat = eng.compute_revised_wibs_matrix(df_disjoint)
+        self.assertAlmostEqual(wibs_mat.loc["SPEC_01", "SPEC_02"], 1.0, places=5)
+        self.assertNotEqual(wibs_mat.loc["SPEC_01", "SPEC_02"], 0.0)
+
+        # SNP-wIBS distance
+        snp_mat = eng.compute_snp_weighted_wibs_matrix(df_disjoint)
+        self.assertAlmostEqual(snp_mat.loc["SPEC_01", "SPEC_02"], 1.0, places=5)
+        self.assertNotEqual(snp_mat.loc["SPEC_01", "SPEC_02"], 0.0)
+
+    def test_background_specimen_separation_and_collision_guard(self):
+        """
+        Adversarial test for Finding 2:
+        Haplotype sheet generation must prevent sample ID collisions between specimen and background dirs
+        and must not silently emit background controls as specimen case rows.
+        """
+        from cyclospora_pyeuk.haplotype_sheet import generate_haplotype_sheet
+        import tempfile
+        
+        with tempfile.TemporaryDirectory() as spec_dir, tempfile.TemporaryDirectory() as bg_dir:
+            # Create a specimen file
+            with open(os.path.join(spec_dir, "SAMPLE_001.txt"), "w") as f:
+                f.write("L1_H01\t100.0\n")
+            
+            # Create duplicate ID in background directory
+            with open(os.path.join(bg_dir, "SAMPLE_001.txt"), "w") as f:
+                f.write("L1_H02\t100.0\n")
+                
+            # Must raise ValueError on ID collision
+            with self.assertRaises(ValueError):
+                generate_haplotype_sheet(specimen_dir=spec_dir, background_dir=bg_dir)
+
+    def test_fetch_bioproject_cohort_strictly_validates_accessions(self):
+        """
+        Adversarial test for Finding 4:
+        efetch_fasta_batch must fail loudly with RuntimeError on missing accessions rather than substituting synthetic homopolymers.
+        """
+        from scripts.fetch_bioproject_cohort import efetch_fasta_batch
+        
+        # Test with a non-existent bogus accession
+        with self.assertRaises(RuntimeError):
+            efetch_fasta_batch(["NON_EXISTENT_ACCESSION_999999"])
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -80,7 +80,7 @@ def _fast_numba_wibs(
             if weight_sum > 0.0:
                 dist = weighted_diff / weight_sum
             else:
-                dist = 0.0
+                dist = 1.0  # Disjoint locus coverage receives maximum distance (1.0), never 0.0 (identity)
 
             D_wibs[i, j] = dist
             D_wibs[j, i] = dist
@@ -283,8 +283,8 @@ class PyEukDistanceEngine:
             for j in range(i + 1, nids):
                 common_loci = set(sample_active[i].keys()) & set(sample_active[j].keys())
                 if not common_loci:
-                    dist_mat[i, j] = 0.0
-                    dist_mat[j, i] = 0.0
+                    dist_mat[i, j] = 1.0  # Disjoint locus coverage receives maximum distance (1.0)
+                    dist_mat[j, i] = 1.0
                     continue
 
                 weighted_scores = []
@@ -462,6 +462,8 @@ class PyEukDistanceEngine:
 
         with np.errstate(all="ignore"):
             mean_dist = np.nanmean(locus_dists, axis=0)
+        max_d = np.nanmax(mean_dist) if not np.isnan(np.nanmax(mean_dist)) and np.nanmax(mean_dist) > 0 else 1.0
+        mean_dist = np.nan_to_num(mean_dist, nan=max_d)
         np.fill_diagonal(mean_dist, 0.0)
         return mean_dist
 
