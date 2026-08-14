@@ -31,6 +31,59 @@ It replaces legacy, brittle heuristics with a fast, mathematically rigorous dist
 
 ---
 
+## 📂 Input & Output Formats
+
+### 📥 Inputs (Choose One)
+
+PyEuk accepts either **raw assembled sequence contigs** or **genotype call lists**:
+
+#### Option A: Assembled FASTA Contigs (`-a / --assembled-fasta`)
+Directly pass assembled contigs from SPAdes, Flye, MEGAHIT, or Galaxy pipelines (as a multi-FASTA, directory of FASTAs, or `.zip`). Headers format as `>SampleID|Locus` or `>SampleID_Contig`:
+
+```fasta
+>C_IL049_18|Nu_378
+ATGCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGA
+>C_IL049_18|Mt_MSR
+TTTTGGGGCCCCAAAATTTTGGGGCCCCAAAATTTTGGGGCCCCAAAA
+>C_WI109_18|Nu_378
+ATGCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGT
+```
+
+#### Option B: Specimen Genotype Call Files (`-s / --specimen-dir`)
+Directory or `.zip` archive containing one text file per specimen, listing detected marker alleles:
+
+```text
+# Example: example_data/specimens/C_IL049_18.txt
+Nu_378_PART_A_Hap_4
+Nu_360i2_PART_A_Hap_1
+Mt_MSR_PART_A_Hap_1
+Nu_CDS1_PART_A_Hap_2
+```
+
+---
+
+### 📤 Outputs
+
+Every PyEuk run produces clean, standard tabular files in the specified output directory (`-o`):
+
+| Output File | Format | Description |
+| :--- | :--- | :--- |
+| **`haplotype_data_sheet.txt`** | TSV Matrix | Binary presence/absence matrix (`Seq_ID` $\times$ Markers, with `X` = present). |
+| **`ensemble_distance_matrix.csv`** | CSV Matrix | Pairwise KING-wIBS genetic distance matrix ($0.0 = \text{identical}$, $1.0 = \text{divergent}$). |
+| **`RESULTING_CLUSTERS_<k>.txt`** | TSV Table | Final outbreak cluster assignments (`Seq_ID` $\to$ `Assigned_cluster`). |
+| **`learned_refs.fasta`** *(De Novo)* | FASTA | Representative sequences of all unique alleles discovered in the cohort. |
+
+#### Example Output: Outbreak Cluster Assignments (`RESULTING_CLUSTERS_2.txt`)
+```tsv
+Seq_ID        Assigned_cluster
+C_IL049_18    1
+C_IL119_18    1
+C_WI109_18    2
+S_MN002_18    2
+```
+
+---
+
 ## 📦 Installation
 
 ```bash
