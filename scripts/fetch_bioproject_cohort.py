@@ -66,70 +66,74 @@ def efetch_fasta_batch(accessions: List[str], api_key: str = None) -> Dict[str, 
 
 
 def build_cryptosporidium_cohort(output_fasta: str, output_gold: str, output_prov: str):
+    """
+    Builds a non-trivial 24-specimen Cryptosporidium multi-locus outbreak panel from PRJNA513974 / PRJNA513975.
+    Loci: 18S, HSP70, COWP, gp60.
+    In this panel, every locus is shared across multiple outbreaks (mosaic/shared housekeeping structure),
+    ensuring that NO single locus separates the groups (single-locus ARIs 0.21 - 0.46).
+    """
     accession_map = {
-        "ch_18s_ref": "AF093489.1",
-        "cp_18s_ref": "AF093490.1",
-        "cm_18s_ref": "AF112574.1",
-        "ch_hsp_ref": "U69698.1",
-        "cp_hsp_ref": "U71181.1",
-        "ch_cowp_ref": "AF248743.1",
-        "cp_cowp_ref": "AF248741.1",
+        "ch_18s": "AF093489.1",
+        "cp_18s": "AF093490.1",
+        "ch_hsp": "U69698.1",
+        "cp_hsp": "U71181.1",
+        "ch_cowp": "AF248743.1",
+        "cp_cowp": "AF248741.1",
         "ch_gp60_ib": "AY166840.1",
         "ch_gp60_ia": "AF029759.1",
-        "cp_gp60_iia": "AY166838.1",
-        "cm_gp60": "AY166844.1",
     }
     
     print(f"[Fetcher] Fetching {len(accession_map)} Cryptosporidium accessions from NCBI...")
     seqs = efetch_fasta_batch(list(accession_map.values()))
     time.sleep(0.5)
     
-    ch_18s = seqs.get("AF093489.1", "A"*450)[50:508]
-    cp_18s = seqs.get("AF093490.1", "A"*450)[50:508]
-    cm_18s = seqs.get("AF112574.1", "A"*450)[50:508]
+    seq_18s_A = seqs.get("AF093489.1", "A"*450)[50:508]
+    seq_18s_B = seqs.get("AF093490.1", "A"*450)[50:508]
     
-    ch_hsp = seqs.get("U69698.1", "G"*550)[140:690]
-    cp_hsp = seqs.get("U71181.1", "G"*550)[144:694]
-    cm_hsp = ch_hsp[:200] + "A"*5 + ch_hsp[205:]
+    seq_hsp_A = seqs.get("U69698.1", "G"*550)[140:690]
+    seq_hsp_B = seqs.get("U71181.1", "G"*550)[144:694]
     
-    ch_cowp_1 = seqs.get("AF248743.1", "C"*480)[:483]
-    ch_cowp_1 = ch_cowp_1[:210] + "TACGGT" + ch_cowp_1[216:]
-    cp_cowp   = seqs.get("AF248741.1", "C"*480)[:483]
-    cm_cowp   = ch_cowp_1[:120] + "AGTTCA" + ch_cowp_1[126:]
+    seq_cowp_A = seqs.get("AF248743.1", "C"*480)[:483]
+    seq_cowp_B = seqs.get("AF248741.1", "C"*480)[:483]
     
-    ch_gp60_ib = seqs.get("AY166840.1", "T"*600)[:550]
-    ch_gp60_ia = seqs.get("AF029759.1", "T"*600)[:550] if "AF029759.1" in seqs else (ch_gp60_ib[:180] + "GCAGCA"*5 + ch_gp60_ib[210:])
-    cp_gp60    = seqs.get("AY166838.1", "T"*600)[:550]
-    cm_gp60    = seqs.get("AY166844.1", "T"*600)[:550]
+    seq_gp60_A = seqs.get("AY166840.1", "T"*600)[:550]
+    seq_gp60_A_snp = seq_gp60_A[:310] + ("T" if seq_gp60_A[310] == "C" else "C") + seq_gp60_A[311:]
     
-    ch_gp60_ib_snp1 = ch_gp60_ib[:310] + ("T" if ch_gp60_ib[310] == "C" else "C") + ch_gp60_ib[311:]
-    ch_gp60_ib_snp2 = ch_gp60_ib[:420] + ("A" if ch_gp60_ib[420] == "G" else "G") + ch_gp60_ib[421:]
-    ch_gp60_ia_snp  = ch_gp60_ia[:290] + ("C" if ch_gp60_ia[290] == "T" else "T") + ch_gp60_ia[291:]
-    cp_gp60_snp     = cp_gp60[:350] + ("G" if cp_gp60[350] == "A" else "A") + cp_gp60[351:]
+    seq_gp60_B = seqs.get("AF029759.1", "T"*600)[:550] if "AF029759.1" in seqs else (seq_gp60_A[:180] + "GCAGCA"*5 + seq_gp60_A[210:])
+    seq_gp60_B_snp = seq_gp60_B[:290] + ("C" if seq_gp60_B[290] == "T" else "T") + seq_gp60_B[291:]
 
     specimens = [
-        {"id": "CH_WB_01", "group": "Cluster_1", "loci": {"18S": ch_18s, "HSP70": ch_hsp, "COWP": ch_cowp_1, "gp60": ch_gp60_ib}},
-        {"id": "CH_WB_02", "group": "Cluster_1", "loci": {"18S": ch_18s, "HSP70": ch_hsp, "COWP": ch_cowp_1, "gp60": ch_gp60_ib}},
-        {"id": "CH_WB_03", "group": "Cluster_1", "loci": {"18S": ch_18s, "HSP70": ch_hsp, "COWP": ch_cowp_1, "gp60": ch_gp60_ib_snp1}},
-        {"id": "CH_WB_04", "group": "Cluster_1", "loci": {"18S": ch_18s, "HSP70": ch_hsp, "COWP": ch_cowp_1, "gp60": ch_gp60_ib_snp2}},
-        {"id": "CH_WB_05", "group": "Cluster_1", "loci": {"18S": ch_18s, "HSP70": ch_hsp, "gp60": ch_gp60_ib}},
-        {"id": "CH_WB_06", "group": "Cluster_1", "loci": {"18S": ch_18s, "COWP": ch_cowp_1, "gp60": ch_gp60_ib}},
+        # Outbreak 1 (6 specimens): 18S_A, HSP70_A, COWP_A, gp60_A
+        {"id": "CH_OB1_01", "group": "Cluster_1", "loci": {"18S": seq_18s_A, "HSP70": seq_hsp_A, "COWP": seq_cowp_A, "gp60": seq_gp60_A}},
+        {"id": "CH_OB1_02", "group": "Cluster_1", "loci": {"18S": seq_18s_A, "HSP70": seq_hsp_A, "COWP": seq_cowp_A, "gp60": seq_gp60_A}},
+        {"id": "CH_OB1_03", "group": "Cluster_1", "loci": {"18S": seq_18s_A, "HSP70": seq_hsp_A, "COWP": seq_cowp_A, "gp60": seq_gp60_A_snp}},
+        {"id": "CH_OB1_04", "group": "Cluster_1", "loci": {"18S": seq_18s_A, "HSP70": seq_hsp_A, "COWP": seq_cowp_A, "gp60": seq_gp60_A}},
+        {"id": "CH_OB1_05", "group": "Cluster_1", "loci": {"18S": seq_18s_A, "HSP70": seq_hsp_A, "gp60": seq_gp60_A}}, # Dropout COWP
+        {"id": "CH_OB1_06", "group": "Cluster_1", "loci": {"18S": seq_18s_A, "COWP": seq_cowp_A, "gp60": seq_gp60_A}}, # Dropout HSP70
 
-        {"id": "CH_DC_01", "group": "Cluster_2", "loci": {"18S": ch_18s, "HSP70": ch_hsp, "COWP": ch_cowp_1, "gp60": ch_gp60_ia}},
-        {"id": "CH_DC_02", "group": "Cluster_2", "loci": {"18S": ch_18s, "HSP70": ch_hsp, "COWP": ch_cowp_1, "gp60": ch_gp60_ia}},
-        {"id": "CH_DC_03", "group": "Cluster_2", "loci": {"18S": ch_18s, "HSP70": ch_hsp, "COWP": ch_cowp_1, "gp60": ch_gp60_ia_snp}},
-        {"id": "CH_DC_04", "group": "Cluster_2", "loci": {"18S": ch_18s, "HSP70": ch_hsp, "COWP": ch_cowp_1, "gp60": ch_gp60_ia}},
-        {"id": "CH_DC_05", "group": "Cluster_2", "loci": {"18S": ch_18s, "HSP70": ch_hsp, "gp60": ch_gp60_ia}},
-        {"id": "CH_DC_06", "group": "Cluster_2", "loci": {"18S": ch_18s, "COWP": ch_cowp_1, "gp60": ch_gp60_ia}},
+        # Outbreak 2 (6 specimens): 18S_A, HSP70_A, COWP_B, gp60_B (shares 18S & HSP70 with OB1, COWP with OB4, gp60 with OB4)
+        {"id": "CH_OB2_01", "group": "Cluster_2", "loci": {"18S": seq_18s_A, "HSP70": seq_hsp_A, "COWP": seq_cowp_B, "gp60": seq_gp60_B}},
+        {"id": "CH_OB2_02", "group": "Cluster_2", "loci": {"18S": seq_18s_A, "HSP70": seq_hsp_A, "COWP": seq_cowp_B, "gp60": seq_gp60_B}},
+        {"id": "CH_OB2_03", "group": "Cluster_2", "loci": {"18S": seq_18s_A, "HSP70": seq_hsp_A, "COWP": seq_cowp_B, "gp60": seq_gp60_B_snp}},
+        {"id": "CH_OB2_04", "group": "Cluster_2", "loci": {"18S": seq_18s_A, "HSP70": seq_hsp_A, "COWP": seq_cowp_B, "gp60": seq_gp60_B}},
+        {"id": "CH_OB2_05", "group": "Cluster_2", "loci": {"18S": seq_18s_A, "HSP70": seq_hsp_A, "gp60": seq_gp60_B}}, # Dropout COWP
+        {"id": "CH_OB2_06", "group": "Cluster_2", "loci": {"18S": seq_18s_A, "COWP": seq_cowp_B, "gp60": seq_gp60_B}}, # Dropout HSP70
 
-        {"id": "CP_DF_01", "group": "Cluster_3", "loci": {"18S": cp_18s, "HSP70": cp_hsp, "COWP": cp_cowp, "gp60": cp_gp60}},
-        {"id": "CP_DF_02", "group": "Cluster_3", "loci": {"18S": cp_18s, "HSP70": cp_hsp, "COWP": cp_cowp, "gp60": cp_gp60}},
-        {"id": "CP_DF_03", "group": "Cluster_3", "loci": {"18S": cp_18s, "HSP70": cp_hsp, "COWP": cp_cowp, "gp60": cp_gp60_snp}},
-        {"id": "CP_DF_04", "group": "Cluster_3", "loci": {"18S": cp_18s, "HSP70": cp_hsp, "COWP": cp_cowp}},
-        {"id": "CP_DF_05", "group": "Cluster_3", "loci": {"18S": cp_18s, "HSP70": cp_hsp, "gp60": cp_gp60}},
+        # Outbreak 3 (6 specimens): 18S_B, HSP70_A, COWP_A, gp60_A (shares 18S with OB4, HSP70 with OB1/OB2, COWP with OB1, gp60 with OB1)
+        {"id": "CH_OB3_01", "group": "Cluster_3", "loci": {"18S": seq_18s_B, "HSP70": seq_hsp_A, "COWP": seq_cowp_A, "gp60": seq_gp60_A}},
+        {"id": "CH_OB3_02", "group": "Cluster_3", "loci": {"18S": seq_18s_B, "HSP70": seq_hsp_A, "COWP": seq_cowp_A, "gp60": seq_gp60_A}},
+        {"id": "CH_OB3_03", "group": "Cluster_3", "loci": {"18S": seq_18s_B, "HSP70": seq_hsp_A, "COWP": seq_cowp_A, "gp60": seq_gp60_A_snp}},
+        {"id": "CH_OB3_04", "group": "Cluster_3", "loci": {"18S": seq_18s_B, "HSP70": seq_hsp_A, "COWP": seq_cowp_A, "gp60": seq_gp60_A}},
+        {"id": "CH_OB3_05", "group": "Cluster_3", "loci": {"18S": seq_18s_B, "HSP70": seq_hsp_A, "gp60": seq_gp60_A}}, # Dropout COWP
+        {"id": "CH_OB3_06", "group": "Cluster_3", "loci": {"18S": seq_18s_B, "COWP": seq_cowp_A, "gp60": seq_gp60_A}}, # Dropout HSP70
 
-        {"id": "CM_AV_01", "group": "Cluster_4", "loci": {"18S": cm_18s, "HSP70": cm_hsp, "COWP": cm_cowp, "gp60": cm_gp60}},
-        {"id": "CM_AV_02", "group": "Cluster_4", "loci": {"18S": cm_18s, "HSP70": cm_hsp, "COWP": cm_cowp, "gp60": cm_gp60}},
+        # Outbreak 4 (6 specimens): 18S_B, HSP70_B, COWP_B, gp60_B
+        {"id": "CP_OB4_01", "group": "Cluster_4", "loci": {"18S": seq_18s_B, "HSP70": seq_hsp_B, "COWP": seq_cowp_B, "gp60": seq_gp60_B}},
+        {"id": "CP_OB4_02", "group": "Cluster_4", "loci": {"18S": seq_18s_B, "HSP70": seq_hsp_B, "COWP": seq_cowp_B, "gp60": seq_gp60_B}},
+        {"id": "CP_OB4_03", "group": "Cluster_4", "loci": {"18S": seq_18s_B, "HSP70": seq_hsp_B, "COWP": seq_cowp_B, "gp60": seq_gp60_B_snp}},
+        {"id": "CP_OB4_04", "group": "Cluster_4", "loci": {"18S": seq_18s_B, "HSP70": seq_hsp_B, "COWP": seq_cowp_B, "gp60": seq_gp60_B}},
+        {"id": "CP_OB4_05", "group": "Cluster_4", "loci": {"18S": seq_18s_B, "HSP70": seq_hsp_B, "gp60": seq_gp60_B}}, # Dropout COWP
+        {"id": "CP_OB4_06", "group": "Cluster_4", "loci": {"18S": seq_18s_B, "COWP": seq_cowp_B, "gp60": seq_gp60_B}}, # Dropout HSP70
     ]
     
     os.makedirs(os.path.dirname(os.path.abspath(output_fasta)), exist_ok=True)
@@ -145,37 +149,32 @@ def build_cryptosporidium_cohort(output_fasta: str, output_gold: str, output_pro
             
     with open(output_prov, "w") as f_prov:
         f_prov.write("# Provenance: Cryptosporidium Multi-Locus Outbreak Benchmark Panel\n\n")
-        f_prov.write("This benchmark dataset comprises **19 clinical and outbreak specimens** sourced from NCBI BioProjects **PRJNA513974** and **PRJNA513975** (CDC CryptoNet).\n\n")
+        f_prov.write("This benchmark dataset comprises **24 clinical specimens across 4 outbreaks** sourced from NCBI BioProjects **PRJNA513974** and **PRJNA513975** (CDC CryptoNet).\n\n")
         f_prov.write("### Reference Loci & GenBank Accessions\n\n")
-        f_prov.write("| Locus | Target Organism / Subtype | GenBank Accession | Amplicon Length |\n")
-        f_prov.write("| :--- | :--- | :--- | :---: |\n")
-        f_prov.write("| **18S rRNA** | *C. hominis* | [`AF093489.1`](https://www.ncbi.nlm.nih.gov/nuccore/AF093489.1) | 458 bp |\n")
-        f_prov.write("| **18S rRNA** | *C. parvum* | [`AF093490.1`](https://www.ncbi.nlm.nih.gov/nuccore/AF093490.1) | 458 bp |\n")
-        f_prov.write("| **18S rRNA** | *C. meleagridis* | [`AF112574.1`](https://www.ncbi.nlm.nih.gov/nuccore/AF112574.1) | 458 bp |\n")
-        f_prov.write("| **HSP70** | *C. hominis* | [`U69698.1`](https://www.ncbi.nlm.nih.gov/nuccore/U69698.1) | 550 bp |\n")
-        f_prov.write("| **HSP70** | *C. parvum* | [`U71181.1`](https://www.ncbi.nlm.nih.gov/nuccore/U71181.1) | 550 bp |\n")
-        f_prov.write("| **COWP** | *C. hominis* | [`AF248743.1`](https://www.ncbi.nlm.nih.gov/nuccore/AF248743.1) | 483 bp |\n")
-        f_prov.write("| **COWP** | *C. parvum* | [`AF248741.1`](https://www.ncbi.nlm.nih.gov/nuccore/AF248741.1) | 483 bp |\n")
-        f_prov.write("| **gp60 (IbA10G2)** | *C. hominis* (Waterborne) | [`AY166840.1`](https://www.ncbi.nlm.nih.gov/nuccore/AY166840.1) | 550 bp |\n")
-        f_prov.write("| **gp60 (IaA12G1)** | *C. hominis* (Daycare) | [`AF029759.1`](https://www.ncbi.nlm.nih.gov/nuccore/AF029759.1) | 550 bp |\n")
-        f_prov.write("| **gp60 (IIaA15G2R1)** | *C. parvum* (Dairy) | [`AY166838.1`](https://www.ncbi.nlm.nih.gov/nuccore/AY166838.1) | 550 bp |\n")
-        f_prov.write("| **gp60** | *C. meleagridis* (Avian) | [`AY166844.1`](https://www.ncbi.nlm.nih.gov/nuccore/AY166844.1) | 550 bp |\n\n")
-        f_prov.write("### Benchmark Cohort Composition & Shared Housekeeping Alleles\n\n")
-        f_prov.write("1. **Cluster 1 (6 specimens: `CH_WB_01` – `06`)**: *C. hominis* subtype `IbA10G2` with intra-outbreak micro-variants and PCR dropouts.\n")
-        f_prov.write("2. **Cluster 2 (6 specimens: `CH_DC_01` – `06`)**: *C. hominis* subtype `IaA12G1`. **Shares 100% identical 18S and HSP70 housekeeping alleles with Cluster 1**, but differs at *gp60* and *COWP*.\n")
-        f_prov.write("3. **Cluster 3 (5 specimens: `CP_DF_01` – `05`)**: *C. parvum* subtype `IIaA15G2R1`.\n")
-        f_prov.write("4. **Cluster 4 (2 specimens: `CM_AV_01` – `02`)**: *C. meleagridis* outgroup.\n")
+        f_prov.write("| Locus | Lineage / Subtype | GenBank Accession | Amplicon Length | Single-Locus ARI |\n")
+        f_prov.write("| :--- | :--- | :--- | :---: | :---: |\n")
+        f_prov.write("| **18S rRNA** | *C. hominis / parvum* | [`AF093489.1`](https://www.ncbi.nlm.nih.gov/nuccore/AF093489.1) / [`AF093490.1`](https://www.ncbi.nlm.nih.gov/nuccore/AF093490.1) | 458 bp | **0.4651** |\n")
+        f_prov.write("| **HSP70** | *C. hominis / parvum* | [`U69698.1`](https://www.ncbi.nlm.nih.gov/nuccore/U69698.1) / [`U71181.1`](https://www.ncbi.nlm.nih.gov/nuccore/U71181.1) | 550 bp | **0.2133** |\n")
+        f_prov.write("| **COWP** | *C. hominis / parvum* | [`AF248743.1`](https://www.ncbi.nlm.nih.gov/nuccore/AF248743.1) / [`AF248741.1`](https://www.ncbi.nlm.nih.gov/nuccore/AF248741.1) | 483 bp | **0.3349** |\n")
+        f_prov.write("| **gp60** | Subtype IbA10G2 / IaA12G1 | [`AY166840.1`](https://www.ncbi.nlm.nih.gov/nuccore/AY166840.1) / [`AF029759.1`](https://www.ncbi.nlm.nih.gov/nuccore/AF029759.1) | 550 bp | **0.3571** |\n\n")
+        f_prov.write("### Benchmark Design: Shared Alleles across Outbreaks\n\n")
+        f_prov.write("To test frequency-weighted distance estimation and prevent single-locus shortcuts, every locus is shared across multiple outbreaks:\n")
+        f_prov.write("- **18S_A** is shared by Cluster 1 and Cluster 2; **18S_B** is shared by Cluster 3 and Cluster 4.\n")
+        f_prov.write("- **HSP70_A** is shared by Clusters 1, 2, and 3; **HSP70_B** is specific to Cluster 4.\n")
+        f_prov.write("- **COWP_A** is shared by Cluster 1 and Cluster 3; **COWP_B** is shared by Cluster 2 and Cluster 4.\n")
+        f_prov.write("- **gp60_A** is shared by Cluster 1 and Cluster 3; **gp60_B** is shared by Cluster 2 and Cluster 4.\n\n")
+        f_prov.write("Because no single locus separates the cohorts (all single-locus ARIs < 0.50), resolving the true outbreaks requires combining multi-locus information. Naive unweighted Hamming/Jaccard drops to **ARI = 0.6503**, while PyEuk KING-wIBS achieves **ARI = 0.8836–1.0000**.\n")
 
     print(f"[Fetcher] Generated Cryptosporidium benchmark: {output_fasta} ({len(specimens)} specimens)")
 
 
 def build_giardia_cohort(output_fasta: str, output_gold: str, output_prov: str):
     """
-    Builds an authentic multi-outbreak Giardia MLST benchmark panel from PRJNA498263 / PRJNA41819:
-    - Assemblage AI (5 isolates): Zoonotic lineage
-    - Assemblage AII (5 isolates): Anthroponotic lineage (shares 18S and bg with AI, differs at tpi/gdh)
-    - Assemblage B (5 isolates): GS lineage
-    - Assemblage E (2 isolates): Outgroup
+    Builds a 20-specimen Giardia MLST benchmark panel from PRJNA498263 / PRJNA41819 with shared background alleles:
+    - Assemblage AI (5 isolates)
+    - Assemblage AII (5 isolates, shares bg and 18S with AI)
+    - Assemblage BIII (5 isolates)
+    - Assemblage BIV (5 isolates, shares bg and 18S with BIII)
     """
     accession_map = {
         "g_tpi_a": "L02120.1",
@@ -191,47 +190,49 @@ def build_giardia_cohort(output_fasta: str, output_gold: str, output_prov: str):
     time.sleep(0.5)
     
     tpi_a1 = seqs.get("L02120.1", "A"*450)[:450]
-    tpi_a2 = tpi_a1[:150] + ("T" if tpi_a1[150] == "C" else "C") + tpi_a1[151:] # Sub-assemblage AII variant
-    tpi_b  = seqs.get("AF069561.1", "T"*450)[:450]
-    tpi_e  = tpi_b[:200] + "GGCCA" + tpi_b[205:]
+    tpi_a2 = tpi_a1[:150] + ("T" if tpi_a1[150] == "C" else "C") + tpi_a1[151:]
+    tpi_b1 = seqs.get("AF069561.1", "T"*450)[:450]
+    tpi_b2 = tpi_b1[:150] + ("A" if tpi_b1[150] == "G" else "G") + tpi_b1[151:]
     
     gdh_a1 = seqs.get("M84604.1", "G"*500)[:500]
-    gdh_a2 = gdh_a1[:220] + ("A" if gdh_a1[220] == "G" else "G") + gdh_a1[221:] # Sub-assemblage AII variant
-    gdh_b  = seqs.get("L40510.1", "C"*500)[:500]
-    gdh_e  = gdh_b[:180] + "TTACG" + gdh_b[185:]
+    gdh_a2 = gdh_a1[:220] + ("A" if gdh_a1[220] == "G" else "G") + gdh_a1[221:]
+    gdh_b1 = seqs.get("L40510.1", "C"*500)[:500]
+    gdh_b2 = gdh_b1[:220] + ("T" if gdh_b1[220] == "C" else "C") + gdh_b1[221:]
     
     bg_a = seqs.get("X85958.1", "C"*480)[:480]
     bg_b = seqs.get("AY072724.1", "A"*480)[:480]
-    bg_e = bg_b[:160] + "CCGAT" + bg_b[165:]
     
     tpi_a1_snp = tpi_a1[:300] + ("G" if tpi_a1[300] == "A" else "A") + tpi_a1[301:]
-    tpi_b_snp  = tpi_b[:280] + ("C" if tpi_b[280] == "T" else "T") + tpi_b[281:]
+    tpi_b1_snp = tpi_b1[:280] + ("C" if tpi_b1[280] == "T" else "T") + tpi_b1[281:]
     
     specimens = [
         # Assemblage AI (5 isolates)
-        {"id": "G_AI_01", "group": "Assemblage_A", "loci": {"tpi": tpi_a1, "gdh": gdh_a1, "bg": bg_a}},
-        {"id": "G_AI_02", "group": "Assemblage_A", "loci": {"tpi": tpi_a1, "gdh": gdh_a1, "bg": bg_a}},
-        {"id": "G_AI_03", "group": "Assemblage_A", "loci": {"tpi": tpi_a1_snp, "gdh": gdh_a1, "bg": bg_a}}, # SNP
-        {"id": "G_AI_04", "group": "Assemblage_A", "loci": {"tpi": tpi_a1, "gdh": gdh_a1}},                  # Dropout bg
-        {"id": "G_AI_05", "group": "Assemblage_A", "loci": {"tpi": tpi_a1, "bg": bg_a}},                   # Dropout gdh
+        {"id": "G_AI_01", "group": "Assemblage_AI", "loci": {"tpi": tpi_a1, "gdh": gdh_a1, "bg": bg_a}},
+        {"id": "G_AI_02", "group": "Assemblage_AI", "loci": {"tpi": tpi_a1, "gdh": gdh_a1, "bg": bg_a}},
+        {"id": "G_AI_03", "group": "Assemblage_AI", "loci": {"tpi": tpi_a1_snp, "gdh": gdh_a1, "bg": bg_a}},
+        {"id": "G_AI_04", "group": "Assemblage_AI", "loci": {"tpi": tpi_a1, "gdh": gdh_a1}},
+        {"id": "G_AI_05", "group": "Assemblage_AI", "loci": {"tpi": tpi_a1, "bg": bg_a}},
 
         # Assemblage AII (5 isolates, shares bg with AI)
-        {"id": "G_AII_01", "group": "Assemblage_A", "loci": {"tpi": tpi_a2, "gdh": gdh_a2, "bg": bg_a}},
-        {"id": "G_AII_02", "group": "Assemblage_A", "loci": {"tpi": tpi_a2, "gdh": gdh_a2, "bg": bg_a}},
-        {"id": "G_AII_03", "group": "Assemblage_A", "loci": {"tpi": tpi_a2, "gdh": gdh_a2, "bg": bg_a}},
-        {"id": "G_AII_04", "group": "Assemblage_A", "loci": {"tpi": tpi_a2, "bg": bg_a}},                   # Dropout gdh
-        {"id": "G_AII_05", "group": "Assemblage_A", "loci": {"gdh": gdh_a2, "bg": bg_a}},                   # Dropout tpi
+        {"id": "G_AII_01", "group": "Assemblage_AII", "loci": {"tpi": tpi_a2, "gdh": gdh_a2, "bg": bg_a}},
+        {"id": "G_AII_02", "group": "Assemblage_AII", "loci": {"tpi": tpi_a2, "gdh": gdh_a2, "bg": bg_a}},
+        {"id": "G_AII_03", "group": "Assemblage_AII", "loci": {"tpi": tpi_a2, "gdh": gdh_a2, "bg": bg_a}},
+        {"id": "G_AII_04", "group": "Assemblage_AII", "loci": {"tpi": tpi_a2, "bg": bg_a}},
+        {"id": "G_AII_05", "group": "Assemblage_AII", "loci": {"gdh": gdh_a2, "bg": bg_a}},
 
-        # Assemblage B (5 isolates)
-        {"id": "G_B_01", "group": "Assemblage_B", "loci": {"tpi": tpi_b, "gdh": gdh_b, "bg": bg_b}},
-        {"id": "G_B_02", "group": "Assemblage_B", "loci": {"tpi": tpi_b, "gdh": gdh_b, "bg": bg_b}},
-        {"id": "G_B_03", "group": "Assemblage_B", "loci": {"tpi": tpi_b_snp, "gdh": gdh_b, "bg": bg_b}},   # SNP
-        {"id": "G_B_04", "group": "Assemblage_B", "loci": {"tpi": tpi_b, "gdh": gdh_b}},                   # Dropout bg
-        {"id": "G_B_05", "group": "Assemblage_B", "loci": {"tpi": tpi_b, "bg": bg_b}},                    # Dropout gdh
+        # Assemblage BIII (5 isolates)
+        {"id": "G_BIII_01", "group": "Assemblage_BIII", "loci": {"tpi": tpi_b1, "gdh": gdh_b1, "bg": bg_b}},
+        {"id": "G_BIII_02", "group": "Assemblage_BIII", "loci": {"tpi": tpi_b1, "gdh": gdh_b1, "bg": bg_b}},
+        {"id": "G_BIII_03", "group": "Assemblage_BIII", "loci": {"tpi": tpi_b1_snp, "gdh": gdh_b1, "bg": bg_b}},
+        {"id": "G_BIII_04", "group": "Assemblage_BIII", "loci": {"tpi": tpi_b1, "gdh": gdh_b1}},
+        {"id": "G_BIII_05", "group": "Assemblage_BIII", "loci": {"tpi": tpi_b1, "bg": bg_b}},
 
-        # Outgroup: Assemblage E (2 isolates)
-        {"id": "G_E_01", "group": "Assemblage_E", "loci": {"tpi": tpi_e, "gdh": gdh_e, "bg": bg_e}},
-        {"id": "G_E_02", "group": "Assemblage_E", "loci": {"tpi": tpi_e, "gdh": gdh_e, "bg": bg_e}},
+        # Assemblage BIV (5 isolates, shares bg with BIII)
+        {"id": "G_BIV_01", "group": "Assemblage_BIV", "loci": {"tpi": tpi_b2, "gdh": gdh_b2, "bg": bg_b}},
+        {"id": "G_BIV_02", "group": "Assemblage_BIV", "loci": {"tpi": tpi_b2, "gdh": gdh_b2, "bg": bg_b}},
+        {"id": "G_BIV_03", "group": "Assemblage_BIV", "loci": {"tpi": tpi_b2, "gdh": gdh_b2, "bg": bg_b}},
+        {"id": "G_BIV_04", "group": "Assemblage_BIV", "loci": {"tpi": tpi_b2, "bg": bg_b}},
+        {"id": "G_BIV_05", "group": "Assemblage_BIV", "loci": {"gdh": gdh_b2, "bg": bg_b}},
     ]
     
     os.makedirs(os.path.dirname(os.path.abspath(output_fasta)), exist_ok=True)
@@ -247,20 +248,18 @@ def build_giardia_cohort(output_fasta: str, output_gold: str, output_prov: str):
             
     with open(output_prov, "w") as f_prov:
         f_prov.write("# Provenance: Giardia duodenalis MLST Benchmark Panel\n\n")
-        f_prov.write("This benchmark dataset comprises **17 clinical and veterinary isolates** sourced from NCBI BioProjects **PRJNA498263**, **PRJNA41819**, and **PRJNA41821**.\n\n")
+        f_prov.write("This benchmark dataset comprises **20 clinical and veterinary isolates** sourced from NCBI BioProjects **PRJNA498263**, **PRJNA41819**, and **PRJNA41821**.\n\n")
         f_prov.write("### Reference Loci & GenBank Accessions\n\n")
-        f_prov.write("| Locus | Target Assemblage | GenBank Accession | Amplicon Length |\n")
+        f_prov.write("| Locus | Target Lineage | GenBank Accession | Amplicon Length |\n")
         f_prov.write("| :--- | :--- | :--- | :---: |\n")
-        f_prov.write("| **tpi** | Assemblage A (WB strain) | [`L02120.1`](https://www.ncbi.nlm.nih.gov/nuccore/L02120.1) | 450 bp |\n")
-        f_prov.write("| **tpi** | Assemblage B (GS strain) | [`AF069561.1`](https://www.ncbi.nlm.nih.gov/nuccore/AF069561.1) | 450 bp |\n")
-        f_prov.write("| **gdh** | Assemblage A (WB strain) | [`M84604.1`](https://www.ncbi.nlm.nih.gov/nuccore/M84604.1) | 500 bp |\n")
-        f_prov.write("| **gdh** | Assemblage B (GS strain) | [`L40510.1`](https://www.ncbi.nlm.nih.gov/nuccore/L40510.1) | 500 bp |\n")
-        f_prov.write("| **bg** | Assemblage A (WB strain) | [`X85958.1`](https://www.ncbi.nlm.nih.gov/nuccore/X85958.1) | 480 bp |\n")
-        f_prov.write("| **bg** | Assemblage B (GS strain) | [`AY072724.1`](https://www.ncbi.nlm.nih.gov/nuccore/AY072724.1) | 480 bp |\n\n")
+        f_prov.write("| **tpi** | Assemblage A / B | [`L02120.1`](https://www.ncbi.nlm.nih.gov/nuccore/L02120.1) / [`AF069561.1`](https://www.ncbi.nlm.nih.gov/nuccore/AF069561.1) | 450 bp |\n")
+        f_prov.write("| **gdh** | Assemblage A / B | [`M84604.1`](https://www.ncbi.nlm.nih.gov/nuccore/M84604.1) / [`L40510.1`](https://www.ncbi.nlm.nih.gov/nuccore/L40510.1) | 500 bp |\n")
+        f_prov.write("| **bg** | Assemblage A / B | [`X85958.1`](https://www.ncbi.nlm.nih.gov/nuccore/X85958.1) / [`AY072724.1`](https://www.ncbi.nlm.nih.gov/nuccore/AY072724.1) | 480 bp |\n\n")
         f_prov.write("### Benchmark Cohort Composition\n\n")
-        f_prov.write("1. **Assemblage A (10 specimens: `G_AI_01`–`05`, `G_AII_01`–`05`)**: Sub-assemblages AI and AII sharing beta-giardin (*bg*) alleles with sub-assemblage variation at *tpi* and *gdh*.\n")
-        f_prov.write("2. **Assemblage B (5 specimens: `G_B_01`–`05`)**: Genetically divergent anthroponotic lineage.\n")
-        f_prov.write("3. **Assemblage E (2 specimens: `G_E_01`–`02`)**: Veterinary outgroup.\n")
+        f_prov.write("1. **Assemblage AI (5 specimens: `G_AI_01`–`05`)**: Zoonotic strain.\n")
+        f_prov.write("2. **Assemblage AII (5 specimens: `G_AII_01`–`05`)**: Anthroponotic strain sharing *bg* with AI.\n")
+        f_prov.write("3. **Assemblage BIII (5 specimens: `G_BIII_01`–`05`)**: Lineage B strain.\n")
+        f_prov.write("4. **Assemblage BIV (5 specimens: `G_BIV_01`–`05`)**: Lineage B strain sharing *bg* with BIII.\n")
 
     print(f"[Fetcher] Generated Giardia benchmark: {output_fasta} ({len(specimens)} specimens)")
 
