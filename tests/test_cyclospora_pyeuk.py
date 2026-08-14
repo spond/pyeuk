@@ -186,6 +186,33 @@ class TestCyclosporaPyEuk(unittest.TestCase):
         ari = adjusted_rand_score(eval_outbreaks["True_Cluster"], eval_outbreaks["Assigned_cluster"])
         self.assertEqual(ari, 1.0)
 
+    def test_giardia_pipeline(self):
+        """Tests that PyEuk runs reference-free de novo typing and outbreak clustering on Giardia."""
+        from cyclospora_pyeuk.haplotype_sheet import learn_de_novo_haplotypes
+        from cyclospora_pyeuk.distance_engine import PyEukDistanceEngine
+        from cyclospora_pyeuk.clustering import CyclosporaClusterFinder
+        from sklearn.metrics import adjusted_rand_score
+
+        sheet_dn, learned = learn_de_novo_haplotypes("example_data/giardia/cohort_contigs.fasta")
+        self.assertEqual(len(sheet_dn), 14)
+        self.assertEqual(len(learned), 11)
+
+        engine = PyEukDistanceEngine(min_completeness=0.0, ploidy=2)
+        wibs = engine.compute_revised_wibs_matrix(sheet_dn)
+
+        finder = CyclosporaClusterFinder()
+        clusters_df, k, _ = finder.find_clusters(wibs, gold_file_path="example_data/giardia/gold_clusters.tsv")
+        
+        gold_df = pd.read_csv("example_data/giardia/gold_clusters.tsv", sep="\t")
+        truth_map = dict(zip(gold_df["Seq_ID"], gold_df["True_Cluster"]))
+        eval_df = clusters_df[clusters_df["Assigned_cluster"] != -1].copy()
+        eval_df["True_Cluster"] = eval_df["Seq_ID"].map(truth_map)
+        
+        # Verify perfect separation of Assemblage A and Assemblage B lineages
+        eval_outbreaks = eval_df[eval_df["True_Cluster"] != "Outgroup_E"]
+        ari = adjusted_rand_score(eval_outbreaks["True_Cluster"], eval_outbreaks["Assigned_cluster"])
+        self.assertEqual(ari, 1.0)
+
 
 if __name__ == "__main__":
     unittest.main()
