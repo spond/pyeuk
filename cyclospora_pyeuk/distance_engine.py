@@ -12,7 +12,7 @@ from numba import njit, prange
 
 
 def parse_locus_name(col: str) -> str:
-    """
+    r"""
     Extracts the homologous locus window name from a marker or haplotype identifier.
     Correctly handles:
     - CDC format: Nu_378_PART_A_Hap_4 -> Nu_378_PART_A

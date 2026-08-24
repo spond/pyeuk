@@ -1,0 +1,5 @@
+include LICENSE
+include README.md
+include cyclospora_lineage_diagnostic_snps.bed
+recursive-include example_data *
+recursive-include tests *.py *.txt
