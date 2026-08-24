@@ -69,18 +69,22 @@ def _fast_numba_wibs(
             valid_markers = locus_mask[i] & locus_mask[j]
             weight_sum = 0.0
             weighted_diff = 0.0
+            has_valid_locus = False
 
             for k in range(n_markers):
                 if valid_markers[k]:
+                    has_valid_locus = True
                     wk = w_j[k]
                     weight_sum += wk
                     diff = abs(X[i, k] - X[j, k]) / locus_ploidy[k]
                     weighted_diff += diff * wk
 
-            if weight_sum > 0.0:
+            if not has_valid_locus:
+                dist = 1.0  # Disjoint locus coverage (0 shared loci) receives maximum distance
+            elif weight_sum > 0.0:
                 dist = weighted_diff / weight_sum
             else:
-                dist = 1.0  # Disjoint locus coverage receives maximum distance (1.0), never 0.0 (identity)
+                dist = 0.0  # Shared loci are all monomorphic in the cohort
 
             D_wibs[i, j] = dist
             D_wibs[j, i] = dist
@@ -174,18 +178,19 @@ class PyEukDistanceEngine:
                 locus_mask[:, idx] = called_specimens
 
         # Calculate population allele frequencies p_j over called instances
-        p_j = np.zeros(X.shape[1])
+        p_j = np.zeros(X.shape[1], dtype=np.float64)
+        w_j = np.zeros(X.shape[1], dtype=np.float64)
+
         for k in range(X.shape[1]):
             called_count = locus_mask[:, k].sum()
             if called_count > 0:
-                p_j[k] = X[locus_mask[:, k], k].mean()
-            else:
-                p_j[k] = 1e-4
-
-        p_j = np.clip(p_j, 1e-4, 1.0 - 1e-4)
-
-        # KING-robust weight w_j = 1 / sqrt(p_j * (1 - p_j))
-        w_j = 1.0 / np.sqrt(p_j * (1.0 - p_j))
+                p_val = float(X[locus_mask[:, k], k].mean())
+                p_j[k] = p_val
+                # Informative polymorphic alleles receive KING-robust weights: 1 / sqrt(p * (1 - p))
+                # Unobserved columns (p == 0.0) and fixed columns (p == 1.0) receive weight 0.0 to prevent dead-weight denominator inflation
+                if 0.0 < p_val < 1.0:
+                    p_clip = np.clip(p_val, 1.0 / (2.0 * called_count), 1.0 - 1.0 / (2.0 * called_count))
+                    w_j[k] = 1.0 / np.sqrt(p_clip * (1.0 - p_clip))
 
         # Parallel Numba execution
         print(f"[PyEuk-wIBS] Executing Numba JIT C-kernel on {nids} specimens across {len(unique_loci)} locus windows...")

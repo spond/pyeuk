@@ -493,6 +493,36 @@ class TestCyclosporaPyEuk(unittest.TestCase):
         with self.assertRaises(RuntimeError):
             efetch_fasta_batch(["NON_EXISTENT_ACCESSION_999999"])
 
+    def test_wibs_distance_invariant_to_unobserved_allele_columns(self):
+        """
+        Adversarial test for Issue #8:
+        Unobserved allele columns (p == 0.0) and fixed columns (p == 1.0) must not inflate the wIBS denominator
+        with dead weight. Adding unobserved reference panel columns must leave pairwise distances bit-identical.
+        """
+        from cyclospora_pyeuk.distance_engine import PyEukDistanceEngine
+        
+        df_base = pd.DataFrame([
+            {"Seq_ID": "SPEC_01", "L1_H01": "X", "L1_H02": "", "L2_H01": "X", "L2_H02": ""},
+            {"Seq_ID": "SPEC_02", "L1_H01": "", "L1_H02": "X", "L2_H01": "X", "L2_H02": ""},
+            {"Seq_ID": "SPEC_03", "L1_H01": "X", "L1_H02": "", "L2_H01": "", "L2_H02": "X"},
+            {"Seq_ID": "SPEC_04", "L1_H01": "", "L1_H02": "X", "L2_H01": "", "L2_H02": "X"},
+        ]).fillna("")
+        
+        eng = PyEukDistanceEngine(min_completeness=0.10, ploidy=1)
+        D_base = eng.compute_revised_wibs_matrix(df_base)
+        
+        # Add 100 unobserved columns (simulating a reference catalog with many unobserved alleles)
+        df_expanded = df_base.copy()
+        for i in range(3, 53):
+            df_expanded[f"L1_H{i:02d}"] = ""
+            df_expanded[f"L2_H{i:02d}"] = ""
+            
+        D_expanded = eng.compute_revised_wibs_matrix(df_expanded)
+        
+        # Pairwise distance matrix must be identical
+        np.testing.assert_allclose(D_base.values, D_expanded.values, atol=1e-7)
+        self.assertGreater(D_base.values.max(), 0.10, "Genetic distance should not be compressed to near-zero.")
+
 
 if __name__ == "__main__":
     unittest.main()
