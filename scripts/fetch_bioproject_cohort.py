@@ -2,8 +2,8 @@
 """
 scripts/fetch_bioproject_cohort.py
 
-Automated utility to fetch authentic multi-locus clinical isolate sequences from NCBI Entrez
-for benchmark panels (Cryptosporidium CDC CryptoNet, Giardia MLST, Cyclospora).
+Automated utility to fetch authentic GenBank reference alleles from NCBI Entrez Nuccore
+and construct synthetic multi-locus benchmark fixtures (Cryptosporidium MLST, Giardia MLST).
 """
 
 import os
@@ -80,7 +80,8 @@ def efetch_fasta_batch(accessions: List[str], api_key: str = None) -> Dict[str, 
 
 def build_cryptosporidium_cohort(output_fasta: str, output_gold: str, output_prov: str):
     """
-    Builds a non-trivial 24-specimen Cryptosporidium multi-locus outbreak panel from PRJNA513974 / PRJNA513975.
+    Builds a synthetic 24-specimen Cryptosporidium multi-locus outbreak benchmark fixture from authentic
+    GenBank reference alleles (AF093489.1, U69698.1, AF248743.1, AY166840.1, etc.) with engineered SNPs and simulated dropouts.
     Loci: 18S, HSP70, COWP, gp60.
     In this panel, every locus is shared across multiple outbreaks (mosaic/shared housekeeping structure),
     ensuring that NO single locus separates the groups (single-locus ARIs 0.21 - 0.46).
@@ -161,8 +162,8 @@ def build_cryptosporidium_cohort(output_fasta: str, output_gold: str, output_pro
             f_gold.write(f"{s['id']}\t{s['group']}\n")
             
     with open(output_prov, "w") as f_prov:
-        f_prov.write("# Provenance: Cryptosporidium Multi-Locus Outbreak Benchmark Panel\n\n")
-        f_prov.write("This benchmark dataset comprises **24 clinical specimens across 4 outbreaks** sourced from NCBI BioProjects **PRJNA513974** and **PRJNA513975** (CDC CryptoNet).\n\n")
+        f_prov.write("# Provenance: Cryptosporidium Multi-Locus Outbreak Benchmark Panel (Synthetic)\n\n")
+        f_prov.write("This synthetic benchmark dataset comprises **24 designed test specimens across 4 clusters** constructed in code from authentic GenBank reference alleles (NCBI Nuccore accessions below), with engineered single-nucleotide polymorphisms and simulated locus dropout to validate multi-locus frequency-weighted clustering against mosaic allele-sharing structures.\n\n")
         f_prov.write("### Reference Loci & GenBank Accessions\n\n")
         f_prov.write("| Locus | Lineage / Subtype | GenBank Accession | Amplicon Length | Single-Locus ARI |\n")
         f_prov.write("| :--- | :--- | :--- | :---: | :---: |\n")
@@ -170,24 +171,26 @@ def build_cryptosporidium_cohort(output_fasta: str, output_gold: str, output_pro
         f_prov.write("| **HSP70** | *C. hominis / parvum* | [`U69698.1`](https://www.ncbi.nlm.nih.gov/nuccore/U69698.1) / [`U71181.1`](https://www.ncbi.nlm.nih.gov/nuccore/U71181.1) | 550 bp | **0.2133** |\n")
         f_prov.write("| **COWP** | *C. hominis / parvum* | [`AF248743.1`](https://www.ncbi.nlm.nih.gov/nuccore/AF248743.1) / [`AF248741.1`](https://www.ncbi.nlm.nih.gov/nuccore/AF248741.1) | 483 bp | **0.3349** |\n")
         f_prov.write("| **gp60** | Subtype IbA10G2 / IaA12G1 | [`AY166840.1`](https://www.ncbi.nlm.nih.gov/nuccore/AY166840.1) / [`AF029759.1`](https://www.ncbi.nlm.nih.gov/nuccore/AF029759.1) | 550 bp | **0.3571** |\n\n")
-        f_prov.write("### Benchmark Design: Shared Alleles across Outbreaks\n\n")
-        f_prov.write("To test frequency-weighted distance estimation and prevent single-locus shortcuts, every locus is shared across multiple outbreaks:\n")
+        f_prov.write("### Benchmark Design: Shared Alleles across Clusters\n\n")
+        f_prov.write("To evaluate frequency-weighted distance estimation and verify that the distance engine cannot take single-locus shortcuts, the panel is constructed so every locus is shared across multiple clusters (mosaic sharing):\n")
         f_prov.write("- **18S_A** is shared by Cluster 1 and Cluster 2; **18S_B** is shared by Cluster 3 and Cluster 4.\n")
         f_prov.write("- **HSP70_A** is shared by Clusters 1, 2, and 3; **HSP70_B** is specific to Cluster 4.\n")
         f_prov.write("- **COWP_A** is shared by Cluster 1 and Cluster 3; **COWP_B** is shared by Cluster 2 and Cluster 4.\n")
         f_prov.write("- **gp60_A** is shared by Cluster 1 and Cluster 3; **gp60_B** is shared by Cluster 2 and Cluster 4.\n\n")
-        f_prov.write("Because no single locus separates the cohorts (all single-locus ARIs < 0.50), resolving the true outbreaks requires combining multi-locus information. Naive unweighted Hamming/Jaccard drops to **ARI = 0.6503**, while PyEuk KING-wIBS achieves **ARI = 0.8836–1.0000**.\n")
+        f_prov.write("Because no single locus separates the cohorts (all single-locus ARIs < 0.50), resolving the true outbreaks requires combining multi-locus information. In this synthetic test fixture, naive unweighted Hamming/Jaccard drops to **ARI = 0.6503**, while PyEuk KING-wIBS achieves **ARI = 0.8836–1.0000**.\n")
 
     print(f"[Fetcher] Generated Cryptosporidium benchmark: {output_fasta} ({len(specimens)} specimens)")
 
 
 def build_giardia_cohort(output_fasta: str, output_gold: str, output_prov: str):
     """
-    Builds a 20-specimen Giardia MLST benchmark panel from PRJNA498263 / PRJNA41819 with shared background alleles:
+    Builds a synthetic 20-specimen Giardia MLST benchmark fixture from authentic
+    GenBank reference alleles (L02120.1, AF069561.1, M84604.1, L40510.1, X85958.1, AY072724.1)
+    with engineered SNPs and simulated locus dropouts:
     - Assemblage AI (5 isolates)
-    - Assemblage AII (5 isolates, shares bg and 18S with AI)
+    - Assemblage AII (5 isolates, shares bg with AI)
     - Assemblage BIII (5 isolates)
-    - Assemblage BIV (5 isolates, shares bg and 18S with BIII)
+    - Assemblage BIV (5 isolates, shares bg with BIII)
     """
     accession_map = {
         "g_tpi_a": "L02120.1",
@@ -260,8 +263,8 @@ def build_giardia_cohort(output_fasta: str, output_gold: str, output_prov: str):
             f_gold.write(f"{s['id']}\t{s['group']}\n")
             
     with open(output_prov, "w") as f_prov:
-        f_prov.write("# Provenance: Giardia duodenalis MLST Benchmark Panel\n\n")
-        f_prov.write("This benchmark dataset comprises **20 clinical and veterinary isolates** sourced from NCBI BioProjects **PRJNA498263**, **PRJNA41819**, and **PRJNA41821**.\n\n")
+        f_prov.write("# Provenance: Giardia duodenalis MLST Benchmark Panel (Synthetic)\n\n")
+        f_prov.write("This synthetic benchmark dataset comprises **20 designed test specimens** constructed in code from authentic GenBank reference alleles (NCBI Nuccore accessions below), with engineered single-nucleotide polymorphisms and simulated locus dropout to validate multi-locus typing across Assemblages A and B.\n\n")
         f_prov.write("### Reference Loci & GenBank Accessions\n\n")
         f_prov.write("| Locus | Target Lineage | GenBank Accession | Amplicon Length |\n")
         f_prov.write("| :--- | :--- | :--- | :---: |\n")
@@ -269,10 +272,10 @@ def build_giardia_cohort(output_fasta: str, output_gold: str, output_prov: str):
         f_prov.write("| **gdh** | Assemblage A / B | [`M84604.1`](https://www.ncbi.nlm.nih.gov/nuccore/M84604.1) / [`L40510.1`](https://www.ncbi.nlm.nih.gov/nuccore/L40510.1) | 500 bp |\n")
         f_prov.write("| **bg** | Assemblage A / B | [`X85958.1`](https://www.ncbi.nlm.nih.gov/nuccore/X85958.1) / [`AY072724.1`](https://www.ncbi.nlm.nih.gov/nuccore/AY072724.1) | 480 bp |\n\n")
         f_prov.write("### Benchmark Cohort Composition\n\n")
-        f_prov.write("1. **Assemblage AI (5 specimens: `G_AI_01`–`05`)**: Zoonotic strain.\n")
-        f_prov.write("2. **Assemblage AII (5 specimens: `G_AII_01`–`05`)**: Anthroponotic strain sharing *bg* with AI.\n")
-        f_prov.write("3. **Assemblage BIII (5 specimens: `G_BIII_01`–`05`)**: Lineage B strain.\n")
-        f_prov.write("4. **Assemblage BIV (5 specimens: `G_BIV_01`–`05`)**: Lineage B strain sharing *bg* with BIII.\n")
+        f_prov.write("1. **Assemblage AI (5 specimens: `G_AI_01`–`05`)**: Zoonotic genotype baseline.\n")
+        f_prov.write("2. **Assemblage AII (5 specimens: `G_AII_01`–`05`)**: Anthroponotic genotype sharing *bg* with AI.\n")
+        f_prov.write("3. **Assemblage BIII (5 specimens: `G_BIII_01`–`05`)**: Lineage B genotype baseline.\n")
+        f_prov.write("4. **Assemblage BIV (5 specimens: `G_BIV_01`–`05`)**: Lineage B genotype sharing *bg* with BIII.\n")
 
     print(f"[Fetcher] Generated Giardia benchmark: {output_fasta} ({len(specimens)} specimens)")
 

@@ -178,11 +178,11 @@ print(f"Detected {k} outbreak clusters across {len(clusters_df)} specimens.")
 | :--- | :--- | :---: | :---: | :---: | :---: | :--- |
 | **CDC Outbreak Benchmark** | *Cyclospora cayetanensis* | 153 | **k = 2** | **0.9721** | 0.8124 | 99.1% sensitivity, 98.1% specificity against CDC surveillance |
 | **Expanded Surveillance Cohort** | *Cyclospora cayetanensis* | 203 | **k = 2** | **1.0000** | 0.8402 | Perfect 1-to-1 recovery of multi-state outbreaks |
-| **Cryptosporidium MLST Panel** | *Cryptosporidium hominis/parvum* | 24 | **k = 4** | **1.0000** *(complete)* / **0.8836** *(ward)* | **0.6503** *(complete)* / **0.8836** *(ward)* | Shared housekeeping panel (no single locus > 0.47 ARI) ([`PROVENANCE.md`](example_data/cryptosporidium/PROVENANCE.md)) |
-| **Giardia MLST Benchmark** | *Giardia duodenalis* | 20 | **k = 2** | **1.0000** | 1.0000 | Major Assemblage A vs B resolution across PRJNA498263/PRJNA41819 ([`PROVENANCE.md`](example_data/giardia/PROVENANCE.md)) |
+| **Cryptosporidium MLST Panel (Synthetic)** | *Cryptosporidium hominis/parvum* | 24 | **k = 4** | **1.0000** *(complete)* / **0.8836** *(ward)* | **0.6503** *(complete)* / **0.8836** *(ward)* | Synthetic mosaic benchmark constructed from GenBank references ([`PROVENANCE.md`](example_data/cryptosporidium/PROVENANCE.md)) |
+| **Giardia MLST Benchmark (Synthetic)** | *Giardia duodenalis* | 20 | **k = 2** | **1.0000** | 1.0000 | Synthetic Assemblage A vs B fixture constructed from GenBank references ([`PROVENANCE.md`](example_data/giardia/PROVENANCE.md)) |
 | **De Novo Reference-Free Run** | *Cyclospora cayetanensis* | 11 | **k = 2** | **1.0000** | 0.8182 | 100% concordance with 0 reference database guidance |
 
-* **Benchmarking Non-Triviality**: On the *Cryptosporidium* panel, all single-locus ARIs are < 0.47 (18S: 0.465, HSP70: 0.213, COWP: 0.335, gp60: 0.357). Under complete linkage, unweighted plain Hamming drops to **ARI = 0.6503**, while PyEuk KING-wIBS achieves **ARI = 1.0000**, proving that multi-locus frequency weighting recovers structure inaccessible to unweighted presence/absence matrices.
+* **Benchmarking Non-Triviality (Synthetic Panels)**: On the synthetic *Cryptosporidium* panel, all single-locus ARIs are < 0.47 (18S: 0.465, HSP70: 0.213, COWP: 0.335, gp60: 0.357). Under complete linkage, unweighted plain Hamming drops to **ARI = 0.6503**, while PyEuk KING-wIBS achieves **ARI = 1.0000**, proving that multi-locus frequency weighting recovers structure inaccessible to unweighted presence/absence matrices.
 * **Speedup**: Distance matrix computation on N = 1,078 national surveillance specimens drops from **24.6 minutes to 14.9 seconds** (99.2× faster).
 * **Metric Validity**: Gram matrix PSD projection guarantees `λ_min >= 0.0` across both wIBS and Ensemble distance matrices, eliminating distorted hierarchical tree geometries.
 

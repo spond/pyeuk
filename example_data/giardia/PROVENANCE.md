@@ -1,6 +1,6 @@
-# Provenance: Giardia duodenalis MLST Benchmark Panel
+# Provenance: Giardia duodenalis MLST Benchmark Panel (Synthetic)
 
-This benchmark dataset comprises **20 clinical and veterinary isolates** sourced from NCBI BioProjects **PRJNA498263**, **PRJNA41819**, and **PRJNA41821**.
+This synthetic benchmark dataset comprises **20 designed test specimens** constructed in code from authentic GenBank reference alleles (NCBI Nuccore accessions below), with engineered single-nucleotide polymorphisms and simulated locus dropout to validate multi-locus typing across Assemblages A and B.
 
 ### Reference Loci & GenBank Accessions
 
@@ -12,7 +12,7 @@ This benchmark dataset comprises **20 clinical and veterinary isolates** sourced
 
 ### Benchmark Cohort Composition
 
-1. **Assemblage AI (5 specimens: `G_AI_01`–`05`)**: Zoonotic strain.
-2. **Assemblage AII (5 specimens: `G_AII_01`–`05`)**: Anthroponotic strain sharing *bg* with AI.
-3. **Assemblage BIII (5 specimens: `G_BIII_01`–`05`)**: Lineage B strain.
-4. **Assemblage BIV (5 specimens: `G_BIV_01`–`05`)**: Lineage B strain sharing *bg* with BIII.
+1. **Assemblage AI (5 specimens: `G_AI_01`–`05`)**: Zoonotic genotype baseline.
+2. **Assemblage AII (5 specimens: `G_AII_01`–`05`)**: Anthroponotic genotype sharing *bg* with AI.
+3. **Assemblage BIII (5 specimens: `G_BIII_01`–`05`)**: Lineage B genotype baseline.
+4. **Assemblage BIV (5 specimens: `G_BIV_01`–`05`)**: Lineage B genotype sharing *bg* with BIII.
