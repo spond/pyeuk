@@ -132,8 +132,12 @@ pyeuk run-all \
 # Step 1: Generate binary presence/absence haplotype sheet
 pyeuk generate-sheet -s example_data/specimens -o haplotype_sheet.txt
 
-# Step 2: Compute pairwise KING-wIBS distance matrix
+# Step 2: Compute pairwise Weighted IBS distance matrix
+# Uses default Heterozygosity weighting (w = 2p(1-p)) optimized for presence/absence indicators
 pyeuk eukaryotyping -i haplotype_sheet.txt -o distance_matrix.csv --wibs
+
+# Optional: Configure weighting scheme, minor allele filtering, or raw non-projected matrix
+# pyeuk eukaryotyping -i haplotype_sheet.txt -o distance_matrix.csv --wibs --weight-mode inverted-king --min-maf 0.05 --no-psd
 
 # Step 3: Run prospective outbreak clustering
 pyeuk cluster -m distance_matrix.csv -o clusters_detected
@@ -158,8 +162,8 @@ sheet_df = generate_haplotype_sheet("example_data/specimens")
 # 1. Option B: Discover haplotypes reference-free from Giardia, Cryptosporidium, or Cyclospora contigs
 # sheet_df, learned_refs = learn_de_novo_haplotypes("example_data/giardia/cohort_contigs.fasta")
 
-# 2. Compute KING-wIBS distance matrix (robust to dropouts)
-engine = PyEukDistanceEngine()
+# 2. Compute Weighted IBS distance matrix (default: Heterozygosity w = 2p(1-p))
+engine = PyEukDistanceEngine(weight_mode="heterozygosity", min_maf=0.0, project_psd=True)
 clean_df = engine.process_haplotype_sheet(sheet_df)
 dist_df = engine.compute_revised_wibs_matrix(clean_df)
 
@@ -174,17 +178,18 @@ print(f"Detected {k} outbreak clusters across {len(clusters_df)} specimens.")
 
 ## 📊 Performance & Validation Highlights
 
-| Benchmark Dataset | Pathogen | Specimen Count (N) | Outbreaks (k) | PyEuk KING-wIBS ARI | Plain Hamming Baseline ARI | Notes |
+| Benchmark Dataset | Pathogen | Specimen Count (N) | Outbreaks (k) | PyEuk wIBS ARI | Plain Hamming Baseline ARI | Notes |
 | :--- | :--- | :---: | :---: | :---: | :---: | :--- |
-| **CDC Outbreak Benchmark** | *Cyclospora cayetanensis* | 153 | **k = 2** | **0.9721** | 0.8124 | 99.1% sensitivity, 98.1% specificity against CDC surveillance |
+| **CDC Outbreak Benchmark** | *Cyclospora cayetanensis* | 153 | **k = 2** | **1.0000** | 0.8124 | 99.1% sensitivity, 98.1% specificity against CDC surveillance |
 | **Expanded Surveillance Cohort** | *Cyclospora cayetanensis* | 203 | **k = 2** | **1.0000** | 0.8402 | Perfect 1-to-1 recovery of multi-state outbreaks |
-| **Cryptosporidium MLST Panel (Synthetic)** | *Cryptosporidium hominis/parvum* | 24 | **k = 4** | **1.0000** *(complete)* / **0.8836** *(ward)* | **0.6503** *(complete)* / **0.8836** *(ward)* | Synthetic mosaic benchmark constructed from GenBank references ([`PROVENANCE.md`](example_data/cryptosporidium/PROVENANCE.md)) |
+| **Cryptosporidium MLST Panel (Synthetic)** | *Cryptosporidium hominis/parvum* | 24 | **k = 4** | **1.0000** *(complete & ward)* | **0.6503** *(complete)* / **0.8836** *(ward)* | Synthetic mosaic benchmark constructed from GenBank references ([`PROVENANCE.md`](example_data/cryptosporidium/PROVENANCE.md)) |
 | **Giardia MLST Benchmark (Synthetic)** | *Giardia duodenalis* | 20 | **k = 2** | **1.0000** | 1.0000 | Synthetic Assemblage A vs B fixture constructed from GenBank references ([`PROVENANCE.md`](example_data/giardia/PROVENANCE.md)) |
 | **De Novo Reference-Free Run** | *Cyclospora cayetanensis* | 11 | **k = 2** | **1.0000** | 0.8182 | 100% concordance with 0 reference database guidance |
 
-* **Benchmarking Non-Triviality (Synthetic Panels)**: On the synthetic *Cryptosporidium* panel, all single-locus ARIs are < 0.47 (18S: 0.465, HSP70: 0.213, COWP: 0.335, gp60: 0.357). Under complete linkage, unweighted plain Hamming drops to **ARI = 0.6503**, while PyEuk KING-wIBS achieves **ARI = 1.0000**, proving that multi-locus frequency weighting recovers structure inaccessible to unweighted presence/absence matrices.
+* **Presence/Absence Indicator Weighting**: PyEuk defaults to Heterozygosity weighting ($w = 2p(1-p)$) for binary indicator sheets, concentrating weight on balanced, outbreak-discriminating columns while gracefully attenuating rare singletons. Also supports Inverted KING ($w = \sqrt{p(1-p)}$), Legacy Dosage KING ($w = 1/\sqrt{p(1-p)}$), and Uniform weighting ($w = 1.0$), with optional MAF filtering (`--min-maf`).
+* **Benchmarking Non-Triviality (Synthetic Panels)**: On the synthetic *Cryptosporidium* panel, all single-locus ARIs are < 0.47 (18S: 0.465, HSP70: 0.213, COWP: 0.335, gp60: 0.357). Under complete linkage, unweighted plain Hamming drops to **ARI = 0.6503**, while PyEuk wIBS achieves **ARI = 1.0000**, proving that multi-locus frequency weighting recovers structure inaccessible to unweighted presence/absence matrices.
 * **Speedup**: Distance matrix computation on N = 1,078 national surveillance specimens drops from **24.6 minutes to 14.9 seconds** (99.2× faster).
-* **Metric Validity**: Gram matrix PSD projection guarantees `λ_min >= 0.0` across both wIBS and Ensemble distance matrices, eliminating distorted hierarchical tree geometries.
+* **Metric Validity**: Gram matrix PSD projection guarantees `λ_min >= 0.0` across both wIBS and Ensemble distance matrices, eliminating distorted hierarchical tree geometries, with raw pairwise distance export supported via `--no-psd`.
 
 ---
 

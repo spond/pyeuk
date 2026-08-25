@@ -95,18 +95,24 @@ def _fast_numba_wibs(
 class PyEukDistanceEngine:
     """
     Modernized Distance Engine implementing Barratt Heuristic, Plucinski Bayesian LLR,
-    and KING-Robust Weighted Identity-By-State (wIBS) with exact Gram matrix PSD projection.
+    and Heterozygosity-Weighted Identity-By-State (wIBS) with exact Gram matrix PSD projection.
     """
 
     def __init__(
         self,
         epsilon: float = 0.3072,
         min_completeness: float = 0.10,
-        ploidy: Optional[Union[int, Dict[str, int]]] = None
+        ploidy: Optional[Union[int, Dict[str, int]]] = None,
+        weight_mode: str = "heterozygosity",
+        min_maf: float = 0.0,
+        project_psd: bool = True
     ):
         self.epsilon = epsilon
         self.min_completeness = min_completeness
         self.ploidy = ploidy
+        self.weight_mode = weight_mode
+        self.min_maf = min_maf
+        self.project_psd = project_psd
 
     def process_haplotype_sheet(self, df: pd.DataFrame) -> pd.DataFrame:
         """
@@ -140,11 +146,37 @@ class PyEukDistanceEngine:
         print(f"[PyEuk] Filtered dataset: {len(cleandata)} / {len(df)} specimens passed completeness criteria (min_locus_completeness >= {self.min_completeness}).")
         return cleandata
 
-    def compute_revised_wibs_matrix(self, df: pd.DataFrame) -> pd.DataFrame:
+    def compute_revised_wibs_matrix(
+        self,
+        df: pd.DataFrame,
+        weight_mode: Optional[str] = None,
+        min_maf: Optional[float] = None,
+        project_psd: Optional[bool] = None
+    ) -> pd.DataFrame:
         """
-        Computes Revised KING-Robust Weighted Identity-By-State (wIBS) Distance Matrix
-        with pairwise-complete locus dropout handling and exact Gram matrix PSD projection.
+        Computes Revised Weighted Identity-By-State (wIBS) Distance Matrix
+        with pairwise-complete locus dropout handling, configurable allele weighting,
+        and exact Gram matrix PSD projection.
+
+        Parameters
+        ----------
+        df : pd.DataFrame
+            Haplotype binary presence/absence indicator sheet.
+        weight_mode : str, optional
+            Allele weighting scheme:
+            - 'heterozygosity' / 'het' (default): w = 2*p*(1-p) (expected heterozygosity / binomial variance for presence/absence indicators).
+            - 'inverted_king' / 'inv_king': w = sqrt(p*(1-p)) (binomial standard deviation).
+            - 'king': w = 1 / sqrt(p*(1-p)) (KING standardization for centered genotype dosage).
+            - 'uniform' / 'unweighted': w = 1.0 (unweighted polymorphic matching).
+        min_maf : float, optional
+            Minor allele frequency filter threshold (default: 0.0). Columns with p < min_maf or p > 1 - min_maf receive weight 0.
+        project_psd : bool, optional
+            Whether to project the distance matrix onto the Positive Semi-Definite (PSD) cone via Gram double centering (default: True).
         """
+        w_mode = (weight_mode or self.weight_mode).lower().replace("-", "_")
+        maf_thresh = self.min_maf if min_maf is None else min_maf
+        do_psd = self.project_psd if project_psd is None else project_psd
+
         clean_df = self.process_haplotype_sheet(df)
         ids = clean_df["Seq_ID"].tolist()
         nids = len(ids)
@@ -177,7 +209,7 @@ class PyEukDistanceEngine:
             for idx in loc_indices:
                 locus_mask[:, idx] = called_specimens
 
-        # Calculate population allele frequencies p_j over called instances
+        # Calculate population allele frequencies p_j over called instances and assign weights
         p_j = np.zeros(X.shape[1], dtype=np.float64)
         w_j = np.zeros(X.shape[1], dtype=np.float64)
 
@@ -186,15 +218,33 @@ class PyEukDistanceEngine:
             if called_count > 0:
                 p_val = float(X[locus_mask[:, k], k].mean())
                 p_j[k] = p_val
-                # Informative polymorphic alleles receive KING-robust weights: 1 / sqrt(p * (1 - p))
-                # Unobserved columns (p == 0.0) and fixed columns (p == 1.0) receive weight 0.0 to prevent dead-weight denominator inflation
+                # Informative polymorphic alleles receive weights according to weight_mode
+                # Unobserved columns (p == 0.0) and fixed columns (p == 1.0) receive weight 0.0
                 if 0.0 < p_val < 1.0:
-                    p_clip = np.clip(p_val, 1.0 / (2.0 * called_count), 1.0 - 1.0 / (2.0 * called_count))
-                    w_j[k] = 1.0 / np.sqrt(p_clip * (1.0 - p_clip))
+                    if maf_thresh > 0.0 and (p_val < maf_thresh or p_val > 1.0 - maf_thresh):
+                        w_j[k] = 0.0
+                    elif w_mode in ["heterozygosity", "het"]:
+                        # Expected heterozygosity / binomial variance: 2 * p * (1 - p)
+                        w_j[k] = 2.0 * p_val * (1.0 - p_val)
+                    elif w_mode in ["inverted_king", "inv_king"]:
+                        # Binomial standard deviation: sqrt(p * (1 - p))
+                        w_j[k] = np.sqrt(p_val * (1.0 - p_val))
+                    elif w_mode in ["uniform", "unweighted"]:
+                        w_j[k] = 1.0
+                    elif w_mode == "king":
+                        # KING standardization for centered genotype dosage: 1 / sqrt(p * (1 - p))
+                        p_clip = np.clip(p_val, 1.0 / (2.0 * called_count), 1.0 - 1.0 / (2.0 * called_count))
+                        w_j[k] = 1.0 / np.sqrt(p_clip * (1.0 - p_clip))
+                    else:
+                        raise ValueError(f"Unknown weight_mode: '{w_mode}'. Choose from 'heterozygosity', 'inverted_king', 'king', 'uniform'.")
 
         # Parallel Numba execution
-        print(f"[PyEuk-wIBS] Executing Numba JIT C-kernel on {nids} specimens across {len(unique_loci)} locus windows...")
+        print(f"[PyEuk-wIBS] Executing Numba JIT C-kernel on {nids} specimens across {len(unique_loci)} locus windows (weight_mode='{w_mode}', min_maf={maf_thresh})...")
         D_wibs = _fast_numba_wibs(X, w_j, locus_mask, locus_ploidy)
+
+        if not do_psd:
+            print("[PyEuk-wIBS] Returning raw wIBS Distance Matrix (PSD projection disabled).")
+            return pd.DataFrame(D_wibs, index=ids, columns=ids)
 
         # Exact Positive Semi-Definite (PSD) projection via Gram Matrix double centering
         H = np.eye(nids) - np.ones((nids, nids)) / float(nids)
@@ -217,14 +267,21 @@ class PyEukDistanceEngine:
         self,
         df: pd.DataFrame,
         sequence_map: Optional[Dict[str, str]] = None,
-        fasta_path: Optional[str] = None
+        fasta_path: Optional[str] = None,
+        weight_mode: Optional[str] = None,
+        min_maf: Optional[float] = None,
+        project_psd: Optional[bool] = None
     ) -> pd.DataFrame:
         """
-        Computes Reference-Free SNP-Weighted KING-Robust wIBS Distance Matrix (PyEuk v0.3.0).
+        Computes Reference-Free SNP-Weighted wIBS Distance Matrix (PyEuk v0.3.0).
         Calculates de novo pairwise sequence alignment Hamming distances directly between called haplotype sequences,
         eliminating reliance on external reference database files.
         """
         import glob
+        w_mode = (weight_mode or self.weight_mode).lower().replace("-", "_")
+        maf_thresh = self.min_maf if min_maf is None else min_maf
+        do_psd = self.project_psd if project_psd is None else project_psd
+
         clean_df = self.process_haplotype_sheet(df)
         ids = clean_df["Seq_ID"].tolist()
         nids = len(ids)
@@ -278,13 +335,26 @@ class PyEukDistanceEngine:
             loc = parse_locus_name(col)
             locus_map.setdefault(loc, []).append(col)
 
-        # Calculate KING locus weights based on population marker allele frequencies
+        # Calculate locus weights based on population marker allele frequencies
         locus_weights = {}
         for loc, cols in locus_map.items():
             sub = (clean_df[cols].values == "X").astype(np.float64)
             p_j = sub.mean(axis=0)
-            w_j = 1.0 / np.sqrt(np.maximum(p_j * (1.0 - p_j), 1e-6))
-            locus_weights[loc] = float(np.mean(w_j))
+            w_cols = np.zeros(len(p_j), dtype=np.float64)
+            for k, p_val in enumerate(p_j):
+                if 0.0 < p_val < 1.0:
+                    if maf_thresh > 0.0 and (p_val < maf_thresh or p_val > 1.0 - maf_thresh):
+                        w_cols[k] = 0.0
+                    elif w_mode in ["heterozygosity", "het"]:
+                        w_cols[k] = 2.0 * p_val * (1.0 - p_val)
+                    elif w_mode in ["inverted_king", "inv_king"]:
+                        w_cols[k] = np.sqrt(p_val * (1.0 - p_val))
+                    elif w_mode in ["uniform", "unweighted"]:
+                        w_cols[k] = 1.0
+                    elif w_mode == "king":
+                        p_clip = np.clip(p_val, 1.0 / (2.0 * len(clean_df)), 1.0 - 1.0 / (2.0 * len(clean_df)))
+                        w_cols[k] = 1.0 / np.sqrt(p_clip * (1.0 - p_clip))
+            locus_weights[loc] = float(np.mean(w_cols)) if len(w_cols) > 0 and np.mean(w_cols) > 0 else 1.0
 
         dist_mat = np.zeros((nids, nids), dtype=np.float64)
         sample_active = []
@@ -319,7 +389,7 @@ class PyEukDistanceEngine:
                             for hj in haps_j:
                                 seq_j = fasta_map.get(norm_h(hj), "")
                                 if seq_i and seq_j:
-                                    d = seq_dist(seq_i, seq_j)
+                                     d = seq_dist(seq_i, seq_j)
                                 else:
                                     d = 1.0
                                 if d < min_d:
@@ -331,6 +401,10 @@ class PyEukDistanceEngine:
                 mean_dist = float(sum(weighted_scores) / weight_sum) if weight_sum > 0.0 else 1.0
                 dist_mat[i, j] = mean_dist
                 dist_mat[j, i] = mean_dist
+
+        if not do_psd:
+            print("[PyEuk-SNP-wIBS] Returning raw SNP-wIBS Distance Matrix (PSD projection disabled).")
+            return pd.DataFrame(dist_mat, index=ids, columns=ids)
 
         # Gram matrix PSD Projection
         H = np.eye(nids) - np.ones((nids, nids)) / float(nids)
@@ -348,11 +422,16 @@ class PyEukDistanceEngine:
         print("[PyEuk-SNP-wIBS] SNP-Weighted wIBS Distance Matrix successfully computed (PSD Guaranteed: lambda_min >= 0.0).")
         return pd.DataFrame(D_psd, index=ids, columns=ids)
 
-    def compute_ensemble_matrix(self, df: pd.DataFrame) -> pd.DataFrame:
+    def compute_ensemble_matrix(
+        self,
+        df: pd.DataFrame,
+        project_psd: Optional[bool] = None
+    ) -> pd.DataFrame:
         """
         Computes the dual-ensemble matrix (Barratt Heuristic + Plucinski Bayesian LLR Rank Integration)
         with exact Gram matrix PSD projection.
         """
+        do_psd = self.project_psd if project_psd is None else project_psd
         clean_df = self.process_haplotype_sheet(df)
         ids, loci_data, ploidy = self._extract_locus_data(clean_df)
         nids = len(ids)
@@ -367,7 +446,7 @@ class PyEukDistanceEngine:
         D_ensemble = self.rank_integrate(D_heur, D_bayes)
 
         # Exact Positive Semi-Definite (PSD) projection via Gram Matrix double centering
-        if nids > 2:
+        if do_psd and nids > 2:
             H = np.eye(nids) - np.ones((nids, nids)) / float(nids)
             G = -0.5 * H @ (D_ensemble ** 2) @ H
             evals, evecs = np.linalg.eigh(G)

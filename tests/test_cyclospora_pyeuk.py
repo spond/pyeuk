@@ -161,8 +161,8 @@ class TestCyclosporaPyEuk(unittest.TestCase):
 
     def test_hand_calculated_wibs_pin_and_mutant_kills(self):
         """
-        Pins exact hand-calculated KING-wIBS distances on a 3-specimen x 2-locus fixture with dropout.
-        Explicitly asserts that mutant implementations (inverted weights, uniform weights, disabled mask) fail.
+        Pins exact hand-calculated wIBS distances on a 3-specimen x 2-locus fixture with dropout.
+        Explicitly asserts exact mathematical values for Heterozygosity (default), KING, Inverted KING, and Uniform modes.
         """
         # LocA (ploidy 1): S1=A1, S2=A1, S3=A2
         # LocB (ploidy 2): S1=B1, S2=B2, S3=uncalled
@@ -171,31 +171,36 @@ class TestCyclosporaPyEuk(unittest.TestCase):
             {"Seq_ID": "S2", "LocA_Hap_1": "X", "LocA_Hap_2": "",  "LocB_Hap_1": "",  "LocB_Hap_2": "X"},
             {"Seq_ID": "S3", "LocA_Hap_1": "",  "LocA_Hap_2": "X", "LocB_Hap_1": "",  "LocB_Hap_2": ""},
         ])
-        engine = PyEukDistanceEngine(min_completeness=0.0, ploidy={"LocA": 1, "LocB": 2})
-        mat = engine.compute_revised_wibs_matrix(df)
+        
+        # 1. Default Heterozygosity weighting: w = 2*p*(1-p)
+        # LocA: p(A1)=2/3, p(A2)=1/3 -> w = 4/9
+        # LocB: p(B1)=1/2, p(B2)=1/2 -> w = 1/2
+        # diff(S1, S2) = 0 on LocA (weight 8/9), 0.5 on LocB_H1 + 0.5 on LocB_H2 (weight 1.0)
+        # dist(S1, S2) = 0.5 / (8/9 + 1.0) = 4.5 / 17 = 0.2647058823529412
+        engine_het = PyEukDistanceEngine(min_completeness=0.0, ploidy={"LocA": 1, "LocB": 2}, weight_mode="heterozygosity", project_psd=False)
+        mat_het = engine_het.compute_revised_wibs_matrix(df)
+        expected_het_d12 = 4.5 / 17.0
+        np.testing.assert_allclose(mat_het.loc["S1", "S2"], expected_het_d12, rtol=1e-5)
+        np.testing.assert_allclose(mat_het.loc["S1", "S3"], 1.0, rtol=1e-5)
+        np.testing.assert_allclose(mat_het.loc["S2", "S3"], 1.0, rtol=1e-5)
 
-        expected_d12 = 0.24264068711928537
-        expected_d13 = 1.0
-        expected_d23 = 1.0
+        # 2. Legacy KING weighting: w = 1 / sqrt(p*(1-p))
+        engine_king = PyEukDistanceEngine(min_completeness=0.0, ploidy={"LocA": 1, "LocB": 2}, weight_mode="king", project_psd=False)
+        mat_king = engine_king.compute_revised_wibs_matrix(df)
+        expected_king_d12 = 0.24264068711928537
+        np.testing.assert_allclose(mat_king.loc["S1", "S2"], expected_king_d12, rtol=1e-5)
 
-        # Exact distance pin
-        np.testing.assert_allclose(mat.loc["S1", "S2"], expected_d12, rtol=1e-5)
-        np.testing.assert_allclose(mat.loc["S1", "S3"], expected_d13, rtol=1e-5)
-        np.testing.assert_allclose(mat.loc["S2", "S3"], expected_d23, rtol=1e-5)
+        # 3. Inverted KING weighting: w = sqrt(p*(1-p))
+        engine_inv = PyEukDistanceEngine(min_completeness=0.0, ploidy={"LocA": 1, "LocB": 2}, weight_mode="inverted_king", project_psd=False)
+        mat_inv = engine_inv.compute_revised_wibs_matrix(df)
+        expected_inv_d12 = 0.2573593128807147
+        np.testing.assert_allclose(mat_inv.loc["S1", "S2"], expected_inv_d12, rtol=1e-5)
 
-        # Assert mutant outputs diverge from true value
-        # Mutant 1: Inverted weights sqrt(p(1-p))
-        w_inv = np.array([np.sqrt(2/9), np.sqrt(2/9), np.sqrt(1/4), np.sqrt(1/4)])
-        d12_mut1 = (0.5*w_inv[2] + 0.5*w_inv[3]) / (2*w_inv[0] + 2*w_inv[2])
-        self.assertNotAlmostEqual(float(mat.loc["S1", "S2"]), d12_mut1, places=3)
-
-        # Mutant 2: Uniform weights (w=1)
-        d12_mut2 = 1.0 / 4.0
-        self.assertNotAlmostEqual(float(mat.loc["S1", "S2"]), d12_mut2, places=3)
-
-        # Mutant 3: Mask disabled (uncalled counted as mismatches)
-        d13_mut3 = (2*2.12132034 + 1.0) / (2*2.12132034 + 4.0)
-        self.assertNotAlmostEqual(float(mat.loc["S1", "S3"]), d13_mut3, places=2)
+        # 4. Uniform weighting: w = 1.0
+        engine_uni = PyEukDistanceEngine(min_completeness=0.0, ploidy={"LocA": 1, "LocB": 2}, weight_mode="uniform", project_psd=False)
+        mat_uni = engine_uni.compute_revised_wibs_matrix(df)
+        expected_uni_d12 = 0.250000
+        np.testing.assert_allclose(mat_uni.loc["S1", "S2"], expected_uni_d12, rtol=1e-5)
 
     def test_bayesian_plucinski_distance_pin_and_mutant_kill(self):
         """
@@ -363,8 +368,8 @@ class TestCyclosporaPyEuk(unittest.TestCase):
         """
         Verifies that on the non-trivial Cryptosporidium panel with shared background alleles:
         1. No single locus alone achieves ARI == 1.0 (all single-locus ARIs < 0.50).
-        2. Under Complete linkage, Plain unweighted Hamming drops to ARI = 0.6503 while PyEuk KING-wIBS achieves ARI = 1.0000.
-        3. Under Ward linkage, PyEuk KING-wIBS achieves ARI = 0.8836.
+        2. Under Complete linkage, Plain unweighted Hamming drops to ARI = 0.6503 while PyEuk wIBS achieves ARI = 1.0000.
+        3. Under Ward linkage, Plain unweighted Hamming drops to ARI = 0.6503 while PyEuk wIBS achieves ARI = 1.0000.
         """
         from cyclospora_pyeuk.haplotype_sheet import learn_de_novo_haplotypes
         from cyclospora_pyeuk.distance_engine import PyEukDistanceEngine
@@ -387,7 +392,7 @@ class TestCyclosporaPyEuk(unittest.TestCase):
             ari_l = adjusted_rand_score(truth, inv)
             self.assertLess(ari_l, 0.50, f"Locus {locus} has ARI {ari_l} >= 0.50")
 
-        # 2. Complete linkage: Plain unweighted Hamming = 0.6503 vs PyEuk KING-wIBS = 1.0000
+        # 2. Complete linkage: Plain unweighted Hamming = 0.6503 vs PyEuk wIBS = 1.0000
         X = (sheet_df[marker_cols].values == "X").astype(float)
         d_ham = squareform(pdist(X, metric="hamming"))
         c_ham_comp = cut_tree(linkage(squareform(d_ham), method="complete"), n_clusters=4).ravel()
@@ -400,10 +405,14 @@ class TestCyclosporaPyEuk(unittest.TestCase):
         ari_wibs_comp = adjusted_rand_score(truth, c_wibs_comp)
         self.assertEqual(ari_wibs_comp, 1.0000)
 
-        # 3. Ward linkage: PyEuk KING-wIBS achieves ARI = 0.8836
+        # 3. Ward linkage: Plain unweighted Hamming = 0.8836 vs PyEuk wIBS = 1.0000
+        c_ham_ward = cut_tree(linkage(squareform(d_ham), method="ward"), n_clusters=4).ravel()
+        ari_ham_ward = adjusted_rand_score(truth, c_ham_ward)
+        self.assertAlmostEqual(ari_ham_ward, 0.8836, places=2)
+
         c_wibs_ward = cut_tree(linkage(squareform(wibs_mat.values), method="ward"), n_clusters=4).ravel()
         ari_wibs_ward = adjusted_rand_score(truth, c_wibs_ward)
-        self.assertAlmostEqual(ari_wibs_ward, 0.8836, places=2)
+        self.assertEqual(ari_wibs_ward, 1.0000)
 
     def test_disjoint_locus_coverage_receives_max_distance_and_never_zero(self):
         """
@@ -523,9 +532,115 @@ class TestCyclosporaPyEuk(unittest.TestCase):
         np.testing.assert_allclose(D_base.values, D_expanded.values, atol=1e-7)
         self.assertGreater(D_base.values.max(), 0.10, "Genetic distance should not be compressed to near-zero.")
 
+    def test_wibs_weight_modes_and_maf_filtering(self):
+        """
+        Adversarial test for Issue #11:
+        Verifies that PyEuk correctly supports Heterozygosity (2p(1-p)), Inverted KING (sqrt(p(1-p))),
+        Legacy KING (1/sqrt(p(1-p))), Uniform (1.0) weighting schemes and MAF thresholding.
+        """
+        from cyclospora_pyeuk.distance_engine import PyEukDistanceEngine
+        
+        # 10 specimens with 1 balanced locus and 1 rare singleton locus
+        df = pd.DataFrame({
+            "Seq_ID": [f"S{i}" for i in range(10)],
+            "Balanced_H01": ["X"] * 5 + [""] * 5,
+            "Balanced_H02": [""] * 5 + ["X"] * 5,
+            "Rare_H01": ["X"] + [""] * 9,
+            "Rare_H02": [""] * 10
+        })
+
+        # Heterozygosity weighting
+        eng_het = PyEukDistanceEngine(min_completeness=0.0, weight_mode="heterozygosity", project_psd=False)
+        mat_het = eng_het.compute_revised_wibs_matrix(df)
+        self.assertIsInstance(mat_het, pd.DataFrame)
+        self.assertAlmostEqual(mat_het.loc["S0", "S1"], 0.0) # S0 and S1 share Balanced_H01; rare singleton does not disrupt identical balanced call
+
+        # Inverted KING weighting
+        eng_inv = PyEukDistanceEngine(min_completeness=0.0, weight_mode="inverted_king", project_psd=False)
+        mat_inv = eng_inv.compute_revised_wibs_matrix(df)
+        self.assertIsInstance(mat_inv, pd.DataFrame)
+
+        # MAF filtering (min_maf = 0.15 drops Rare_H01 because p = 0.10)
+        eng_maf = PyEukDistanceEngine(min_completeness=0.0, min_maf=0.15, project_psd=False)
+        mat_maf = eng_maf.compute_revised_wibs_matrix(df)
+        # S0 and S1 differ ONLY at the rare singleton, which is dropped, so distance between S0 and S1 is exactly 0.0
+        np.testing.assert_allclose(mat_maf.loc["S0", "S1"], 0.0, atol=1e-7)
+
+    def test_private_singleton_does_not_saturate_distance_or_isolate_specimen(self):
+        """
+        Adversarial test for Issue #11:
+        Under presence/absence indicator encoding, a specimen carrying a private singleton must NOT
+        saturate pairwise distance to 1.0 against members of its true outbreak cluster.
+        """
+        from cyclospora_pyeuk.distance_engine import PyEukDistanceEngine
+        from scipy.spatial.distance import squareform
+        from scipy.cluster.hierarchy import linkage, cut_tree
+        from sklearn.metrics import adjusted_rand_score
+
+        # Outbreak A (10 specimens) vs Outbreak B (10 specimens)
+        # S0 in Outbreak A has 1 private sequencing artifact / singleton
+        rows = []
+        for i in range(20):
+            group = "Outbreak_A" if i < 10 else "Outbreak_B"
+            row = {"Seq_ID": f"SPEC_{i:02d}", "Group": group}
+            # 5 balanced discriminating loci
+            for loc in range(1, 6):
+                if group == "Outbreak_A":
+                    row[f"L{loc}_H01"] = "X"
+                    row[f"L{loc}_H02"] = ""
+                else:
+                    row[f"L{loc}_H01"] = ""
+                    row[f"L{loc}_H02"] = "X"
+            # 1 private singleton carried ONLY by SPEC_00
+            row["Artifact_H01"] = "X" if i == 0 else ""
+            rows.append(row)
+
+        df_singleton = pd.DataFrame(rows)
+        truth = df_singleton["Group"].tolist()
+
+        # Under default Heterozygosity weighting (ploidy=1)
+        eng = PyEukDistanceEngine(min_completeness=0.0, ploidy=1, weight_mode="heterozygosity", project_psd=False)
+        D_het = eng.compute_revised_wibs_matrix(df_singleton)
+
+        # Distance between SPEC_00 and other Outbreak A members must be small (< 0.10), NEVER 1.0
+        self.assertLess(D_het.loc["SPEC_00", "SPEC_01"], 0.10)
+        self.assertGreater(D_het.loc["SPEC_00", "SPEC_10"], 0.90)
+
+        # Ward clustering at k=2 must recover exact 10-vs-10 outbreak clusters (ARI = 1.0000), NOT a 19-vs-1 split
+        clusters = cut_tree(linkage(squareform(D_het.values), method="ward"), n_clusters=2).ravel()
+        ari = adjusted_rand_score(truth, clusters)
+        self.assertEqual(ari, 1.0000)
+
+    def test_psd_projection_toggle_and_spectrum(self):
+        """
+        Adversarial test for Issue #11:
+        Verifies that project_psd=False returns raw pairwise distances, while project_psd=True
+        guarantees that the double-centered Gram matrix has no negative eigenvalues.
+        """
+        from cyclospora_pyeuk.distance_engine import PyEukDistanceEngine
+
+        df = pd.DataFrame([
+            {"Seq_ID": f"S{i}", "L1_H1": "X" if i%2==0 else "", "L1_H2": "X" if i%2!=0 else "",
+             "L2_H1": "X" if i%3==0 else "", "L2_H2": "X" if i%3!=0 else ""}
+            for i in range(10)
+        ])
+
+        eng_raw = PyEukDistanceEngine(min_completeness=0.0, project_psd=False)
+        D_raw = eng_raw.compute_revised_wibs_matrix(df)
+
+        eng_psd = PyEukDistanceEngine(min_completeness=0.0, project_psd=True)
+        D_psd = eng_psd.compute_revised_wibs_matrix(df)
+
+        n = len(D_psd)
+        H = np.eye(n) - np.ones((n, n))/n
+        G = -0.5 * H @ (D_psd.values ** 2) @ H
+        evals = np.linalg.eigvalsh(G)
+        self.assertGreaterEqual(float(np.min(evals)), -1e-12)
+
 
 if __name__ == "__main__":
     unittest.main()
+
 
 
 

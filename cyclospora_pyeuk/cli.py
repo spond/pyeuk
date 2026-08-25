@@ -96,11 +96,14 @@ def main():
     dist_parser.add_argument("-i", "--input-sheet", required=True, help="Path to input haplotype data sheet TSV")
     dist_parser.add_argument("-o", "--output-matrix", help="Output path for ensemble distance matrix CSV")
     dist_parser.add_argument("-e", "--epsilon", type=float, default=0.3072, help="Bayesian error rate epsilon")
-    dist_parser.add_argument("--wibs", action="store_true", help="Compute KING-robust Weighted IBS matrix instead of Barratt ensemble")
+    dist_parser.add_argument("--wibs", action="store_true", help="Compute Weighted IBS matrix instead of Barratt ensemble")
     dist_parser.add_argument("--metric", choices=["wibs", "ensemble", "snp-wibs"], default=None, help="Distance metric to compute")
     dist_parser.add_argument("--ploidy", type=int, default=None, help="Organism base ploidy (e.g. 1 for haploid Cryptosporidium/bacteria, 2 for diploid)")
     dist_parser.add_argument("-f", "--fasta", help="Optional path to reference or learned FASTA file for sequence-weighted SNP-wIBS distance")
     dist_parser.add_argument("--min-completeness", type=float, default=0.10, help="Minimum locus completeness fraction (default: 0.10)")
+    dist_parser.add_argument("--weight-mode", choices=["heterozygosity", "inverted-king", "king", "uniform"], default="heterozygosity", help="Allele weighting scheme for presence/absence indicator columns (default: heterozygosity)")
+    dist_parser.add_argument("--min-maf", type=float, default=0.0, help="Minimum minor allele frequency threshold to filter rare/private singletons (default: 0.0)")
+    dist_parser.add_argument("--no-psd", dest="project_psd", action="store_false", default=True, help="Skip Gram matrix PSD projection and return raw pairwise distances")
 
     # Command 4: cluster
     cluster_parser = subparsers.add_parser("cluster", help="Run Ward AGNES hierarchical clustering (unsupervised or supervised)")
@@ -124,6 +127,9 @@ def main():
     runall_parser.add_argument("--de-novo", action="store_true", help="Discover loci and haplotypes de novo without any reference database")
     runall_parser.add_argument("--ploidy", type=int, default=None, help="Organism base ploidy (e.g. 1 for haploid Cryptosporidium/bacteria, 2 for diploid)")
     runall_parser.add_argument("--min-completeness", type=float, default=0.10, help="Minimum locus completeness fraction (default: 0.10)")
+    runall_parser.add_argument("--weight-mode", choices=["heterozygosity", "inverted-king", "king", "uniform"], default="heterozygosity", help="Allele weighting scheme for presence/absence indicator columns (default: heterozygosity)")
+    runall_parser.add_argument("--min-maf", type=float, default=0.0, help="Minimum minor allele frequency threshold to filter rare/private singletons (default: 0.0)")
+    runall_parser.add_argument("--no-psd", dest="project_psd", action="store_false", default=True, help="Skip Gram matrix PSD projection and return raw pairwise distances")
 
     args = parser.parse_args()
 
@@ -173,7 +179,10 @@ def main():
         engine = PyEukDistanceEngine(
             epsilon=args.epsilon,
             min_completeness=args.min_completeness,
-            ploidy=args.ploidy
+            ploidy=args.ploidy,
+            weight_mode=args.weight_mode,
+            min_maf=args.min_maf,
+            project_psd=args.project_psd
         )
         if args.metric == "wibs" or args.wibs:
             res_df = engine.compute_revised_wibs_matrix(df)
@@ -214,16 +223,19 @@ def main():
         engine = PyEukDistanceEngine(
             epsilon=args.epsilon,
             min_completeness=args.min_completeness,
-            ploidy=args.ploidy
+            ploidy=args.ploidy,
+            weight_mode=args.weight_mode,
+            min_maf=args.min_maf,
+            project_psd=args.project_psd
         )
         if args.metric == "wibs" or (args.metric is None and (args.preset == "ont-r10" or args.de_novo)):
-            print("[DistanceEngine] Using KING-Robust wIBS Distance Engine (PSD Guaranteed)...")
+            print(f"[DistanceEngine] Using wIBS Distance Engine (weight_mode='{args.weight_mode}', min_maf={args.min_maf}, project_psd={args.project_psd})...")
             matrix_df = engine.compute_revised_wibs_matrix(sheet_df)
         elif args.metric == "snp-wibs":
-            print("[DistanceEngine] Using SNP-Weighted wIBS Distance Engine...")
+            print(f"[DistanceEngine] Using SNP-Weighted wIBS Distance Engine (weight_mode='{args.weight_mode}', min_maf={args.min_maf}, project_psd={args.project_psd})...")
             matrix_df = engine.compute_snp_weighted_wibs_matrix(sheet_df, fasta_path=args.assembled_fasta)
         else:
-            print("[DistanceEngine] Using Plucinski-Barratt Ensemble Distance Engine (PSD Guaranteed)...")
+            print(f"[DistanceEngine] Using Plucinski-Barratt Ensemble Distance Engine (project_psd={args.project_psd})...")
             matrix_df = engine.compute_ensemble_matrix(sheet_df)
         matrix_df.to_csv(matrix_path)
 

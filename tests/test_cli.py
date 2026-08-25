@@ -97,6 +97,42 @@ class TestPyEukCLI(unittest.TestCase):
         self.assertFalse(df.empty)
         self.assertEqual(df.iloc[0, 0], "L1_H01_TEST")
 
+    def test_cli_weight_mode_and_no_psd_options(self):
+        # Test eukaryotyping with --weight-mode, --min-maf, and --no-psd
+        sheet_path = os.path.join(self.test_out, "sheet_test.txt")
+        sys.argv = [
+            "pyeuk", "generate-sheet",
+            "-s", "example_data/specimens",
+            "-o", sheet_path
+        ]
+        main()
+
+        out_matrix_raw = os.path.join(self.test_out, "dist_raw.csv")
+        sys.argv = [
+            "pyeuk", "eukaryotyping",
+            "-i", sheet_path,
+            "-o", out_matrix_raw,
+            "--metric", "wibs",
+            "--weight-mode", "heterozygosity",
+            "--min-maf", "0.05",
+            "--no-psd",
+            "--ploidy", "2"
+        ]
+        main()
+        self.assertTrue(os.path.exists(out_matrix_raw))
+
+        out_matrix_king = os.path.join(self.test_out, "dist_king.csv")
+        sys.argv = [
+            "pyeuk", "eukaryotyping",
+            "-i", sheet_path,
+            "-o", out_matrix_king,
+            "--metric", "wibs",
+            "--weight-mode", "king",
+            "--ploidy", "2"
+        ]
+        main()
+        self.assertTrue(os.path.exists(out_matrix_king))
+
 
 if __name__ == "__main__":
     unittest.main()
