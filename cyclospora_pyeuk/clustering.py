@@ -21,7 +21,13 @@ class CyclosporaClusterFinder:
     clustering (via Dendrogram Merge Height Gap Knee Detection) and gold-standard supervised calibration.
     """
 
-    def __init__(self, stringency: float = 95.0, robust: bool = True, default_threshold: float = 0.05):
+    def __init__(
+        self,
+        stringency: float = 95.0,
+        robust: bool = True,
+        default_threshold: float = 0.05,
+        relative_gap_floor: float = 0.2200
+    ):
         """
         Parameters
         ----------
@@ -31,10 +37,13 @@ class CyclosporaClusterFinder:
             If True, uses Median + 3 * 1.4826 * MAD for threshold calibration. If False, uses Mean + 3 * StdDev.
         default_threshold : float
             Default threshold for prospective unsupervised clustering when gold standards are omitted.
+        relative_gap_floor : float
+            Minimum relative merge-height gap fraction of tree height required for unsupervised knee selection (default: 0.2200).
         """
         self.stringency = stringency
         self.robust = robust
         self.default_threshold = default_threshold
+        self.relative_gap_floor = relative_gap_floor
 
     @staticmethod
     def compute_distance_auc(dist_df: pd.DataFrame, gold_df: pd.DataFrame) -> float:
@@ -129,6 +138,7 @@ class CyclosporaClusterFinder:
         gold_file_path: Optional[str] = None,
         k_min: int = 2,
         k_max: int = 50,
+        relative_gap_floor: Optional[float] = None,
         output_dir: Optional[str] = None,
         all_input_ids: Optional[List[str]] = None
     ) -> Tuple[pd.DataFrame, int, float]:
@@ -143,9 +153,11 @@ class CyclosporaClusterFinder:
         gold_file_path : Optional[str]
             Path to gold standard cluster reference list (optional).
         k_min : int
-            Minimum cluster count for tree cut search (default: 2 to guard against k=1 single-cluster collapse).
+            Minimum cluster count for tree cut search (default: 2).
         k_max : int
             Maximum cluster count for tree cut search (default: 50).
+        relative_gap_floor : Optional[float]
+            Minimum relative merge-height gap fraction of tree height required for unsupervised knee selection (default: 0.2200).
         output_dir : Optional[str]
             Target directory for cluster output TSV.
         all_input_ids : Optional[List[str]]
@@ -218,43 +230,45 @@ class CyclosporaClusterFinder:
 
         else:
             # Prospective Unsupervised Mode: Dendrogram Merge Height Gap Knee Detection (Elbow Rule)
-            print("[ClusterFinder] Prospective Unsupervised Mode: Evaluating dendrogram merge height gap knee...")
+            rel_floor = self.relative_gap_floor if relative_gap_floor is None else relative_gap_floor
+            print(f"[ClusterFinder] Prospective Unsupervised Mode: Evaluating dendrogram merge height gap knee (k in [{k_min}, {k_max}], relative_gap_floor={rel_floor:.4f})...")
             
             # Z[:, 2] contains merge heights in ascending order (last merge is 2 -> 1 cluster)
             heights = Z[::-1, 2] # Descending order: heights[0] is merge 2 -> 1, heights[1] is merge 3 -> 2, etc.
+            tree_height = float(heights[0]) if len(heights) > 0 else 1.0
             
-            search_limit = min(k_max, len(heights))
+            # Adaptive minimum cluster size guard: min 2 for small cohorts, up to 5 for surveillance scale
+            min_required_size = max(2, min(5, int(0.10 * n_samples)))
+            search_start = max(2, k_min)
+            search_limit = min(k_max, len(heights) + 1, n_samples)
+            
             gap_scores = []
+            for k in range(search_start, search_limit + 1):
+                idx = k - 2
+                if idx < len(heights):
+                    h_curr = heights[idx]
+                    h_next = heights[idx + 1] if idx + 1 < len(heights) else 0.0
+                    gap = h_curr - h_next
+                    gap_scores.append((k, gap, h_curr, h_next))
 
-            for idx in range(search_limit - 1):
-                k = idx + 2 # k clusters
-                h_curr = heights[idx]
-                h_next = heights[idx + 1]
-                gap = h_curr - h_next
-                gap_scores.append((k, gap, h_curr, h_next))
+            valid_k_found = False
+            best_fallback_k = None
+            best_fallback_info = None
+            rejection_reasons = []
 
             if gap_scores:
                 # Sort candidate k by descending merge height gap
                 sorted_gaps = sorted(gap_scores, key=lambda x: x[1], reverse=True)
-                tree_height = float(heights[0]) if len(heights) > 0 else 1.0
-                
-                # Adaptive minimum cluster size guard: min 2 for small cohorts, up to 5 for surveillance scale
-                min_required_size = max(2, min(5, int(0.10 * n_samples)))
 
-                valid_k_found = False
                 for candidate in sorted_gaps:
                     cand_k, cand_gap, h_curr, h_next = candidate
                     cand_rel_gap = (cand_gap / tree_height) if tree_height > 0 else 0.0
 
-                    if cand_rel_gap < 0.2200:
-                        break  # Remaining gap scores are below scale-free noise floor
-
-                    # Check cluster size distribution for candidate k
                     cand_ids = cut_tree(Z, n_clusters=cand_k).ravel()
                     cluster_counts = np.bincount(cand_ids)
                     min_c_size = int(np.min(cluster_counts))
 
-                    if min_c_size >= min_required_size:
+                    if cand_rel_gap >= rel_floor and min_c_size >= min_required_size:
                         correct_k = cand_k
                         max_gap = cand_gap
                         rel_gap = cand_rel_gap
@@ -263,14 +277,30 @@ class CyclosporaClusterFinder:
                         print(f"[ClusterFinder] Dendrogram Merge Height Gap Knee Detection: Optimal k = {correct_k} (Height Gap = {max_gap:.5f}, Rel Gap = {rel_gap:.4f}, Min Cluster Size = {min_c_size} >= {min_required_size}, Threshold = {threshold:.5f}).")
                         break
                     else:
-                        print(f"[ClusterFinder] Outlier Split Guard: Rejecting candidate k = {cand_k} (Min Cluster Size = {min_c_size} < {min_required_size}). Searching for valid partition...")
+                        reasons = []
+                        if cand_rel_gap < rel_floor:
+                            reasons.append(f"relative gap {cand_rel_gap:.4f} < floor {rel_floor:.4f}")
+                        if min_c_size < min_required_size:
+                            reasons.append(f"min cluster size {min_c_size} < guard {min_required_size}")
+                        rejection_reasons.append(f"k={cand_k} ({', '.join(reasons)})")
+
+                        if min_c_size >= min_required_size and best_fallback_k is None:
+                            best_fallback_k = cand_k
+                            best_fallback_info = (cand_gap, cand_rel_gap, h_curr, h_next, min_c_size)
 
                 if not valid_k_found:
-                    correct_k = 1
-                    threshold = float(heights[0]) if len(heights) > 0 else 0.0
-                    print(f"[ClusterFinder] Dendrogram Merge Height Gap Knee Detection: No valid outbreak partition found meeting minimum cluster size ({min_required_size}). Assigned k = 1 (Single Outbreak Group).")
+                    if k_min > 2 and best_fallback_k is not None:
+                        cand_gap, cand_rel_gap, h_curr, h_next, min_c_size = best_fallback_info
+                        correct_k = best_fallback_k
+                        threshold = float((h_curr + h_next) / 2.0)
+                        print(f"[ClusterFinder] Selected best candidate k = {correct_k} satisfying requested k_min >= {k_min} and cluster size guard ({min_c_size} >= {min_required_size}), despite relative gap ({cand_rel_gap:.4f}) being below floor ({rel_floor:.4f}).")
+                    else:
+                        correct_k = 1
+                        threshold = float(heights[0]) if len(heights) > 0 else 0.0
+                        fail_summary = "; ".join(rejection_reasons[:3])
+                        print(f"[ClusterFinder] Dendrogram Merge Height Gap Knee Detection: No valid partition (k in [{search_start}, {search_limit}]) met both relative gap floor ({rel_floor:.4f}) and cluster size guard ({min_required_size}). Rejections: {fail_summary}. Assigned k = 1 (Single Outbreak Group).")
             else:
-                correct_k = 2
+                correct_k = max(1, k_min)
                 threshold = self.default_threshold
 
             cluster_ids = cut_tree(Z, n_clusters=correct_k).ravel()

@@ -133,6 +133,37 @@ class TestPyEukCLI(unittest.TestCase):
         main()
         self.assertTrue(os.path.exists(out_matrix_king))
 
+    def test_cli_clustering_k_min_and_relative_gap_floor(self):
+        sheet_path = os.path.join(self.test_out, "sheet_cluster_test.txt")
+        sys.argv = [
+            "pyeuk", "generate-sheet",
+            "-s", "example_data/specimens",
+            "-o", sheet_path
+        ]
+        main()
+
+        out_matrix = os.path.join(self.test_out, "dist_matrix_k.csv")
+        sys.argv = [
+            "pyeuk", "eukaryotyping",
+            "-i", sheet_path,
+            "-o", out_matrix,
+            "--metric", "wibs"
+        ]
+        main()
+
+        # Run cluster with --k-min, --k-max, and --relative-gap-floor
+        cluster_out = os.path.join(self.test_out, "clusters_k_test")
+        sys.argv = [
+            "pyeuk", "cluster",
+            "-m", out_matrix,
+            "--k-min", "2",
+            "--k-max", "10",
+            "--relative-gap-floor", "0.10",
+            "-o", cluster_out
+        ]
+        main()
+        self.assertTrue(os.path.exists(cluster_out))
+
 
 if __name__ == "__main__":
     unittest.main()

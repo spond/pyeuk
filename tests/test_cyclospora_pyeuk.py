@@ -637,6 +637,70 @@ class TestCyclosporaPyEuk(unittest.TestCase):
         evals = np.linalg.eigvalsh(G)
         self.assertGreaterEqual(float(np.min(evals)), -1e-12)
 
+    def test_label_free_k_selection_honors_k_min(self):
+        """
+        Adversarial test for Issue #12:
+        Verifies that k_min is strictly honored in label-free unsupervised clustering mode,
+        even when k=2 has a dominant merge height gap.
+        """
+        from cyclospora_pyeuk.clustering import CyclosporaClusterFinder
+        
+        # 10 samples in 3 distinct groups: Group 1 (4 samples), Group 2 (3 samples), Group 3 (3 samples)
+        # Groups 1 and 2 are closer together than to Group 3
+        D = np.zeros((10, 10))
+        for i in range(10):
+            for j in range(i+1, 10):
+                g1 = 1 if i < 4 else (2 if i < 7 else 3)
+                g2 = 1 if j < 4 else (2 if j < 7 else 3)
+                d = 0.05 if g1 == g2 else (0.30 if {g1, g2} == {1, 2} else 0.80)
+                D[i, j] = d
+                D[j, i] = d
+
+        dist_df = pd.DataFrame(D, index=[f"S{i}" for i in range(10)], columns=[f"S{i}" for i in range(10)])
+
+        finder = CyclosporaClusterFinder()
+        # Default unsupervised mode evaluates k >= 2 (returns k=2 or k=3 based on relative gap)
+        # When user explicitly specifies k_min=3, it must evaluate candidates >= 3 and return k=3
+        res_df, k_selected, thresh = finder.find_clusters(dist_df, gold_file_path=None, k_min=3)
+        self.assertGreaterEqual(k_selected, 3)
+        self.assertEqual(k_selected, 3)
+
+    def test_label_free_relative_gap_floor_override(self):
+        """
+        Adversarial test for Issue #12:
+        Verifies that relative_gap_floor can be configured/overridden to prevent k=1 single-cluster collapse
+        when merge height gaps are smaller than the 0.2200 floor.
+        """
+        from cyclospora_pyeuk.clustering import CyclosporaClusterFinder
+
+        # 10 samples: 2 samples in 1A, 2 in 1B, 6 in Group 2
+        # Merge gap for 1A vs 1B (k=3) is small (rel_gap < 0.05)
+        D = np.zeros((10, 10))
+        for i in range(10):
+            for j in range(i+1, 10):
+                if i in [0, 1] and j in [0, 1]:
+                    d = 0.02
+                elif i in [2, 3] and j in [2, 3]:
+                    d = 0.02
+                elif (i in [0, 1] and j in [2, 3]) or (i in [2, 3] and j in [0, 1]):
+                    d = 0.10
+                else:
+                    d = 0.90
+                D[i, j] = d
+                D[j, i] = d
+
+        dist_df = pd.DataFrame(D, index=[f"S{i}" for i in range(10)], columns=[f"S{i}" for i in range(10)])
+
+        # When k_min=3 is passed, it honors k=3 even if relative gap is below 0.22
+        finder = CyclosporaClusterFinder(relative_gap_floor=0.2200)
+        res_df, k_sel, _ = finder.find_clusters(dist_df, gold_file_path=None, k_min=3)
+        self.assertEqual(k_sel, 3)
+
+        # When relative_gap_floor=0.01 is set, smaller relative gaps are directly valid
+        finder_sensitive = CyclosporaClusterFinder(relative_gap_floor=0.01)
+        res_df2, k_sel2, _ = finder_sensitive.find_clusters(dist_df, gold_file_path=None, k_min=3)
+        self.assertEqual(k_sel2, 3)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -112,6 +112,9 @@ def main():
     cluster_parser.add_argument("-o", "--output-dir", default="outbreak_clusters", help="Output directory for resulting clusters")
     cluster_parser.add_argument("-s", "--stringency", type=float, default=95.0, help="Target threshold coverage percentage")
     cluster_parser.add_argument("--robust", action="store_true", default=True, help="Use robust Median + 3*MAD threshold calibration")
+    cluster_parser.add_argument("--k-min", type=int, default=2, help="Minimum number of clusters to search (default: 2)")
+    cluster_parser.add_argument("--k-max", type=int, default=50, help="Maximum number of clusters to search (default: 50)")
+    cluster_parser.add_argument("--relative-gap-floor", type=float, default=0.2200, help="Minimum relative merge-height gap fraction of tree height required for unsupervised knee selection (default: 0.2200)")
 
     # Command 5: run-all
     runall_parser = subparsers.add_parser("run-all", help="Execute complete pipeline (Sheet Generation -> Distance Matrix -> Clustering)")
@@ -130,6 +133,9 @@ def main():
     runall_parser.add_argument("--weight-mode", choices=["heterozygosity", "inverted-king", "king", "uniform"], default="heterozygosity", help="Allele weighting scheme for presence/absence indicator columns (default: heterozygosity)")
     runall_parser.add_argument("--min-maf", type=float, default=0.0, help="Minimum minor allele frequency threshold to filter rare/private singletons (default: 0.0)")
     runall_parser.add_argument("--no-psd", dest="project_psd", action="store_false", default=True, help="Skip Gram matrix PSD projection and return raw pairwise distances")
+    runall_parser.add_argument("--k-min", type=int, default=2, help="Minimum number of clusters to search (default: 2)")
+    runall_parser.add_argument("--k-max", type=int, default=50, help="Maximum number of clusters to search (default: 50)")
+    runall_parser.add_argument("--relative-gap-floor", type=float, default=0.2200, help="Minimum relative merge-height gap fraction of tree height required for unsupervised knee selection (default: 0.2200)")
 
     args = parser.parse_args()
 
@@ -197,8 +203,19 @@ def main():
     elif args.command == "cluster":
         import pandas as pd
         matrix_df = pd.read_csv(args.matrix, index_col=0)
-        finder = CyclosporaClusterFinder(stringency=args.stringency, robust=args.robust)
-        finder.find_clusters(matrix_df, args.gold_clusters, output_dir=args.output_dir)
+        finder = CyclosporaClusterFinder(
+            stringency=args.stringency,
+            robust=args.robust,
+            relative_gap_floor=args.relative_gap_floor
+        )
+        finder.find_clusters(
+            matrix_df,
+            args.gold_clusters,
+            k_min=args.k_min,
+            k_max=args.k_max,
+            relative_gap_floor=args.relative_gap_floor,
+            output_dir=args.output_dir
+        )
 
     elif args.command == "run-all":
         os.makedirs(args.output_dir, exist_ok=True)
@@ -240,8 +257,18 @@ def main():
         matrix_df.to_csv(matrix_path)
 
         print("\n=== STAGE 3: Outbreak Cluster Determination ===")
-        finder = CyclosporaClusterFinder()
-        finder.find_clusters(matrix_df, args.gold_clusters, output_dir=args.output_dir, all_input_ids=all_specimens)
+        finder = CyclosporaClusterFinder(
+            relative_gap_floor=args.relative_gap_floor
+        )
+        finder.find_clusters(
+            matrix_df,
+            args.gold_clusters,
+            k_min=args.k_min,
+            k_max=args.k_max,
+            relative_gap_floor=args.relative_gap_floor,
+            output_dir=args.output_dir,
+            all_input_ids=all_specimens
+        )
 
         print("\n==================================================")
         print("SUCCESS: Pipeline complete!")
