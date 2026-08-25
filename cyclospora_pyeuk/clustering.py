@@ -44,6 +44,7 @@ class CyclosporaClusterFinder:
         self.robust = robust
         self.default_threshold = default_threshold
         self.relative_gap_floor = relative_gap_floor
+        self.last_selection_meta: Dict[str, any] = {}
 
     @staticmethod
     def compute_distance_auc(dist_df: pd.DataFrame, gold_df: pd.DataFrame) -> float:
@@ -274,6 +275,18 @@ class CyclosporaClusterFinder:
                         rel_gap = cand_rel_gap
                         threshold = float((h_curr + h_next) / 2.0)
                         valid_k_found = True
+                        self.last_selection_meta = {
+                            "status": "optimal",
+                            "k": correct_k,
+                            "threshold": threshold,
+                            "gap": max_gap,
+                            "relative_gap": rel_gap,
+                            "min_cluster_size": min_c_size,
+                            "min_required_size": min_required_size,
+                            "k_min": k_min,
+                            "k_max": k_max,
+                            "tree_height": tree_height
+                        }
                         print(f"[ClusterFinder] Dendrogram Merge Height Gap Knee Detection: Optimal k = {correct_k} (Height Gap = {max_gap:.5f}, Rel Gap = {rel_gap:.4f}, Min Cluster Size = {min_c_size} >= {min_required_size}, Threshold = {threshold:.5f}).")
                         break
                     else:
@@ -293,15 +306,45 @@ class CyclosporaClusterFinder:
                         cand_gap, cand_rel_gap, h_curr, h_next, min_c_size = best_fallback_info
                         correct_k = best_fallback_k
                         threshold = float((h_curr + h_next) / 2.0)
+                        self.last_selection_meta = {
+                            "status": "floor_override",
+                            "k": correct_k,
+                            "threshold": threshold,
+                            "gap": cand_gap,
+                            "relative_gap": cand_rel_gap,
+                            "min_cluster_size": min_c_size,
+                            "min_required_size": min_required_size,
+                            "k_min": k_min,
+                            "k_max": k_max,
+                            "tree_height": tree_height
+                        }
                         print(f"[ClusterFinder] Selected best candidate k = {correct_k} satisfying requested k_min >= {k_min} and cluster size guard ({min_c_size} >= {min_required_size}), despite relative gap ({cand_rel_gap:.4f}) being below floor ({rel_floor:.4f}).")
                     else:
                         correct_k = 1
                         threshold = float(heights[0]) if len(heights) > 0 else 0.0
+                        status_label = "unsatisfiable_constraint" if k_min > 2 else "single_group"
+                        self.last_selection_meta = {
+                            "status": status_label,
+                            "k": 1,
+                            "threshold": threshold,
+                            "rejection_reasons": rejection_reasons,
+                            "min_required_size": min_required_size,
+                            "k_min": k_min,
+                            "k_max": k_max,
+                            "tree_height": tree_height
+                        }
                         fail_summary = "; ".join(rejection_reasons[:3])
                         print(f"[ClusterFinder] Dendrogram Merge Height Gap Knee Detection: No valid partition (k in [{search_start}, {search_limit}]) met both relative gap floor ({rel_floor:.4f}) and cluster size guard ({min_required_size}). Rejections: {fail_summary}. Assigned k = 1 (Single Outbreak Group).")
             else:
                 correct_k = max(1, k_min)
                 threshold = self.default_threshold
+                self.last_selection_meta = {
+                    "status": "trivial",
+                    "k": correct_k,
+                    "threshold": threshold,
+                    "k_min": k_min,
+                    "k_max": k_max
+                }
 
             cluster_ids = cut_tree(Z, n_clusters=correct_k).ravel()
 
