@@ -49,7 +49,11 @@ def _require_pysam():
         except ImportError as exc:
             raise SystemExit(
                 "This step reads BAM files and needs pysam, which is an optional dependency.\n"
-                "  pip install 'cyclospora_pyeuk[amplicon]'"
+                "  pip:   pip install 'cyclospora_pyeuk[amplicon]'\n"
+                "  conda: conda install -c bioconda pysam\n"
+                "Conda has no concept of extras, so the bioconda `pyeuk` package carries pysam "
+                "as an ordinary run dependency and this message should not appear there. If it "
+                "does, the environment is not the one pyeuk was installed into."
             ) from exc
         _pysam = _p
     return _pysam
