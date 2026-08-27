@@ -5,6 +5,22 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.0] - 2026-08-27
+
+### Added
+* **Amplicon Front End (`cyclospora_pyeuk.amplicon`)**:
+  - `pyeuk define-windows`: Chooses cohort analysis windows and spannable cores from read data without requiring curated reference BEDs (resolves #14, #15).
+  - `pyeuk call-haplotypes`: Directly calls window haplotypes on single spanning reads with left-aligned indel normalization and HGVS-like content-derived nomenclature (resolves #14, #15).
+  - `pyeuk build-sheet`: Assembles specimen-by-haplotype presence/absence sheets, haplotype mapping catalogs, and long-format observation tables with per-window frequency and minor-allele filtering (resolves #14, #15).
+  - Configured optional dependency `cyclospora_pyeuk[amplicon]` (`pysam>=0.22`) with lazy import guards ensuring core functionality installs and runs cleanly without pysam.
+* **Unified Naming Contract (`cyclospora_pyeuk.naming`)**:
+  - Centralized bidirectional parsing and formatting via `name_haplotype()` and `parse_locus_name()`, enforcing invariant round-tripping across CDC legacy, de novo, windowed amplicon, and compact formatting styles (resolves #14).
+* **Distance-Threshold Linkage Clustering**:
+  - Added `--cut distance` mode to `CyclosporaClusterFinder` and CLI `cluster` / `run-all` subcommands to cut hierarchical dendrograms at fixed dissimilarity thresholds for surveillance cohorts with abundant singletons (resolves #15).
+  - Added `suggest_linkage_threshold()` supporting robust MAD-based calibration from labelled within-cluster pairs or 5th percentile distance distribution heuristics with transparent provenance reporting (resolves #15).
+  - Added `--linkage-method` (`ward`, `single`, `average`, `complete`) to follow transmission chains natively (resolves #15).
+  - Added informative warning when `k_max < n/2` in unsupervised count mode.
+
 ---
 
 ## [0.4.0] - 2026-08-25

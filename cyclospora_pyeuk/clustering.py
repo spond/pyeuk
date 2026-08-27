@@ -10,7 +10,7 @@ import datetime
 import numpy as np
 import pandas as pd
 from scipy.spatial.distance import squareform
-from scipy.cluster.hierarchy import linkage, cut_tree
+from scipy.cluster.hierarchy import linkage, cut_tree, fcluster
 from sklearn.metrics import roc_auc_score
 from typing import Tuple, Optional, Dict, List
 
@@ -133,6 +133,58 @@ class CyclosporaClusterFinder:
 
         return float(threshold)
 
+    @staticmethod
+    def suggest_linkage_threshold(dist_df: pd.DataFrame, gold_df: Optional[pd.DataFrame] = None,
+                                  robust: bool = True) -> Tuple[float, str]:
+        """
+        Proposes a distance threshold for linkage mode, and says where it came from.
+
+        Two sources, in order of preference:
+
+        1. Labelled pairs. Take every pair known to belong together, and set the threshold at
+           the upper edge of that distribution -- median + 3 * 1.4826 * MAD when robust, else
+           mean + 3 * SD. This is the same calibration the supervised path already uses.
+        2. The distance distribution itself. With no labels, fall back to the 5th percentile of
+           all pairwise distances. Related pairs are a small minority of all pairs in
+           surveillance data, so the lower tail is where they live.
+
+        Returns (threshold, provenance) so the caller can print how the number was obtained
+        rather than presenting it as if it were a constant.
+        """
+        vals = dist_df.values[np.triu_indices(len(dist_df), k=1)]
+        vals = vals[~np.isnan(vals)]
+
+        if gold_df is not None and len(gold_df) > 0:
+            gold_df = gold_df.copy()
+            gold_df.columns = [c.strip() for c in gold_df.columns]
+            if "Seq_ID" not in gold_df.columns:
+                gold_df.rename(columns={gold_df.columns[0]: "Seq_ID"}, inplace=True)
+            if "Cluster_alias" not in gold_df.columns and len(gold_df.columns) > 1:
+                gold_df.rename(columns={gold_df.columns[1]: "Cluster_alias"}, inplace=True)
+            ids = set(dist_df.index)
+            within = []
+            for _, grp in gold_df[gold_df["Seq_ID"].isin(ids)].groupby("Cluster_alias"):
+                mem = grp["Seq_ID"].tolist()
+                for i in range(len(mem)):
+                    for j in range(i + 1, len(mem)):
+                        d = dist_df.loc[mem[i], mem[j]]
+                        if not np.isnan(d):
+                            within.append(float(d))
+            if len(within) >= 3:
+                a = np.asarray(within)
+                if robust:
+                    med = float(np.median(a))
+                    mad = float(np.median(np.abs(a - med)))
+                    t = med + 3.0 * 1.4826 * mad
+                else:
+                    t = float(np.mean(a) + 3.0 * np.std(a))
+                return float(t), f"calibrated from {len(within)} labelled within-cluster pairs"
+
+        if len(vals) == 0:
+            return 0.05, "no usable distances; fell back to a fixed default"
+        t = float(np.percentile(vals, 5.0))
+        return t, f"5th percentile of {len(vals)} pairwise distances (no labels supplied)"
+
     def find_clusters(
         self,
         dist_df: pd.DataFrame,
@@ -141,7 +193,10 @@ class CyclosporaClusterFinder:
         k_max: int = 50,
         relative_gap_floor: Optional[float] = None,
         output_dir: Optional[str] = None,
-        all_input_ids: Optional[List[str]] = None
+        all_input_ids: Optional[List[str]] = None,
+        cut_mode: str = "count",
+        linkage_threshold: Optional[float] = None,
+        linkage_method: str = "ward"
     ) -> Tuple[pd.DataFrame, int, float]:
         """
         Runs Ward AGNES hierarchical clustering and dynamic tree cut search.
@@ -163,6 +218,40 @@ class CyclosporaClusterFinder:
             Target directory for cluster output TSV.
         all_input_ids : Optional[List[str]]
             List of all original specimen IDs before completeness filtering (for transparent reporting).
+        cut_mode : str
+            "count" (default) or "distance". These answer different questions and neither is a
+            better version of the other.
+
+            "count" asks: split this cohort into k groups. It selects k from the largest merge
+            height gap, subject to a minimum relative gap and a minimum cluster size. That is
+            the right question for a closed outbreak investigation, where every specimen belongs
+            to some cluster and clusters below a few members are not actionable.
+
+            "distance" asks: which specimens are close enough to be linked? It cuts the tree at
+            a fixed dissimilarity. There is no k to choose and no gap requirement, and specimens
+            with no near neighbour are returned as singletons rather than forced into a group.
+            That is the right question for surveillance, where most cases are unrelated.
+
+            Choosing k fails outright on surveillance-shaped data. On a 183-specimen
+            Plasmodium vivax AmpliSeq cohort whose published truth is 93 groups with 79
+            singletons, both guards reject every k that could reproduce it -- the minimum
+            cluster size is 5 at that n, and a diffuse cloud has no dominant merge gap -- so the
+            count rule returns a single cluster. Cutting the same tree at 0.08 gives 116 groups
+            with 91 singletons, ARI 0.7578 against the published assignment, and the score stays
+            above 0.70 across 0.06-0.12.
+        linkage_threshold : Optional[float]
+            Dissimilarity at which to cut in "distance" mode. If omitted it is calibrated by
+            suggest_linkage_threshold() and the provenance of the number is printed.
+        linkage_method : str
+            Linkage for the tree, default "ward". "single" is worth trying in distance mode:
+            Ward optimises within-cluster variance, which is the right objective when clusters
+            are compact blobs, but transmission clusters are chains -- A infects B infects C --
+            and single linkage follows a chain. On the Plasmodium vivax AmpliSeq cohort, single
+            linkage at 0.070 returns exactly 92 groups, the published number, at ARI 0.7762,
+            against 0.7578 for Ward at its own best cut.
+
+            Single linkage chains through noise if the threshold is loose, so it is not the
+            default. It is offered because on this shape it is measurably better.
 
         Returns
         -------
@@ -181,7 +270,49 @@ class CyclosporaClusterFinder:
         condensed_dist = squareform(dist_mat, checks=False)
 
         # Ward AGNES hierarchical clustering
-        Z = linkage(condensed_dist, method="ward", metric="euclidean")
+        Z = linkage(condensed_dist, method=linkage_method, metric="euclidean")
+
+        if cut_mode == "distance":
+            # Linkage mode: cut at a dissimilarity, do not choose a cluster count.
+            # Neither the relative-gap floor nor the minimum-cluster-size guard applies here.
+            # Both exist to keep the count rule from reporting a split it cannot justify, and
+            # both would reject the singleton-heavy structure this mode is written for.
+            gold_df = None
+            if gold_file_path and os.path.exists(gold_file_path):
+                gold_df = pd.read_csv(gold_file_path, sep=r"\s+", engine="python")
+            if linkage_threshold is None:
+                threshold, provenance = self.suggest_linkage_threshold(
+                    dist_df, gold_df, robust=self.robust)
+                print(f"[ClusterFinder] Linkage mode: threshold {threshold:.4f} "
+                      f"({provenance}).")
+            else:
+                threshold = float(linkage_threshold)
+                print(f"[ClusterFinder] Linkage mode: threshold {threshold:.4f} "
+                      f"(supplied by caller).")
+
+            cluster_ids = fcluster(Z, threshold, criterion="distance")
+            sizes = np.bincount(cluster_ids)[1:]
+            n_singletons = int(np.sum(sizes == 1))
+            correct_k = int(len(sizes))
+            best_cluster_df = pd.DataFrame({
+                "Seq_ID": samples,
+                "Assigned_cluster": cluster_ids
+            })
+            print(f"[ClusterFinder] Linkage mode: {correct_k} groups over {n_samples} specimens "
+                  f"({n_singletons} singletons, largest {int(sizes.max())}).")
+            self.last_selection_meta = {
+                "status": "linkage",
+                "cut_mode": "distance",
+                "k": correct_k,
+                "threshold": threshold,
+                "n_singletons": n_singletons,
+                "largest_cluster": int(sizes.max()),
+                "n_samples": n_samples,
+            }
+            best_cluster_df = self._write_clusters(
+                best_cluster_df, output_dir, correct_k, all_input_ids, samples)
+            return best_cluster_df, correct_k, float(threshold)
+
 
         if gold_file_path and os.path.exists(gold_file_path):
             gold_df = pd.read_csv(gold_file_path, sep=r"\s+", engine="python")
@@ -233,6 +364,15 @@ class CyclosporaClusterFinder:
             # Prospective Unsupervised Mode: Dendrogram Merge Height Gap Knee Detection (Elbow Rule)
             rel_floor = self.relative_gap_floor if relative_gap_floor is None else relative_gap_floor
             print(f"[ClusterFinder] Prospective Unsupervised Mode: Evaluating dendrogram merge height gap knee (k in [{k_min}, {k_max}], relative_gap_floor={rel_floor:.4f})...")
+            if k_max < n_samples / 2:
+                # Surveillance cohorts are often mostly singletons, so the true k can approach
+                # n. A default k_max of 50 silently puts such an answer out of reach: on a
+                # 183-specimen cohort whose published truth is 93 groups, no k in [2, 50] can
+                # be right whatever the guards do. Say so rather than return a number the
+                # search range alone determined.
+                print(f"[ClusterFinder] Note: k_max={k_max} is below n/2={n_samples // 2}. If this "
+                      f"cohort is mostly unrelated specimens its true k may exceed the search "
+                      f"range; consider --cut distance, which does not choose a k.")
             
             # Z[:, 2] contains merge heights in ascending order (last merge is 2 -> 1 cluster)
             heights = Z[::-1, 2] # Descending order: heights[0] is merge 2 -> 1, heights[1] is merge 3 -> 2, etc.
@@ -361,27 +501,38 @@ class CyclosporaClusterFinder:
                 "Assigned_cluster": remapped_ids
             })
 
-        # Transparently append low-completeness / excluded specimens if provided
+        best_cluster_df = self._write_clusters(
+            best_cluster_df, output_dir, correct_k, all_input_ids, samples)
+
+        return best_cluster_df, correct_k, float(threshold)
+
+    @staticmethod
+    def _write_clusters(cluster_df, output_dir, k, all_input_ids, samples):
+        """Append excluded specimens as cluster -1, write the TSV, return the full frame.
+
+        Shared by both cut modes so a specimen that was dropped for low completeness is reported
+        the same way whichever question was asked. Silently omitting it would make the cohort
+        look smaller than it was.
+        """
         if all_input_ids:
             missing_ids = [sid for sid in all_input_ids if sid not in samples]
             if missing_ids:
                 missing_df = pd.DataFrame({
                     "Seq_ID": missing_ids,
-                    "Assigned_cluster": -1  # Cluster -1 indicates Low Completeness / Excluded from distance matrix
+                    "Assigned_cluster": -1  # -1 = excluded from the distance matrix
                 })
-                best_cluster_df = pd.concat([best_cluster_df, missing_df], ignore_index=True)
-                print(f"[ClusterFinder] Transparent Reporting: {len(missing_ids)} low-completeness specimens explicitly reported as Cluster -1 (Unassigned).")
+                cluster_df = pd.concat([cluster_df, missing_df], ignore_index=True)
+                print(f"[ClusterFinder] Transparent Reporting: {len(missing_ids)} low-completeness "
+                      f"specimens explicitly reported as Cluster -1 (Unassigned).")
 
         if output_dir is None:
             output_dir = "clusters_detected"
         os.makedirs(output_dir, exist_ok=True)
         today_str = datetime.date.today().strftime("%Y-%m-%d")
-        output_path = os.path.join(output_dir, f"{today_str}_RESULTING_CLUSTERS_{correct_k}.txt")
-
-        best_cluster_df.to_csv(output_path, sep="\t", index=False)
+        output_path = os.path.join(output_dir, f"{today_str}_RESULTING_CLUSTERS_{k}.txt")
+        cluster_df.to_csv(output_path, sep="\t", index=False)
         print(f"[ClusterFinder] Saved outbreak cluster assignments to: {output_path}")
-
-        return best_cluster_df, correct_k, float(threshold)
+        return cluster_df
 
     def detect_micro_clusters(
         self,

@@ -164,6 +164,72 @@ class TestPyEukCLI(unittest.TestCase):
         main()
         self.assertTrue(os.path.exists(cluster_out))
 
+    def test_cli_clustering_distance_cut_and_single_linkage(self):
+        sheet_path = os.path.join(self.test_out, "sheet_dist_test.txt")
+        sys.argv = [
+            "pyeuk", "generate-sheet",
+            "-s", "example_data/specimens",
+            "-o", sheet_path
+        ]
+        main()
+
+        out_matrix = os.path.join(self.test_out, "dist_matrix_d.csv")
+        sys.argv = [
+            "pyeuk", "eukaryotyping",
+            "-i", sheet_path,
+            "-o", out_matrix,
+            "--metric", "wibs"
+        ]
+        main()
+
+        cluster_out = os.path.join(self.test_out, "clusters_dist_test")
+        sys.argv = [
+            "pyeuk", "cluster",
+            "-m", out_matrix,
+            "--cut", "distance",
+            "--linkage-method", "single",
+            "--linkage-threshold", "0.15",
+            "-o", cluster_out
+        ]
+        main()
+        self.assertTrue(os.path.exists(cluster_out))
+
+    def test_cli_run_all_distance_cut(self):
+        out_dir = os.path.join(self.test_out, "run_all_dist")
+        sys.argv = [
+            "pyeuk", "run-all",
+            "-a", "example_data/cryptosporidium/cohort_contigs.fasta",
+            "--de-novo",
+            "--cut", "distance",
+            "--linkage-method", "ward",
+            "--linkage-threshold", "0.10",
+            "--ploidy", "1",
+            "--min-completeness", "0.0",
+            "-o", out_dir
+        ]
+        main()
+        self.assertTrue(os.path.exists(os.path.join(out_dir, "haplotype_data_sheet.txt")))
+        self.assertTrue(os.path.exists(os.path.join(out_dir, "ensemble_distance_matrix.csv")))
+
+    def test_cli_amplicon_build_sheet_subcommand(self):
+        calls_dir = os.path.join(self.test_out, "mock_calls")
+        os.makedirs(calls_dir, exist_ok=True)
+        call_tsv = os.path.join(calls_dir, "SAMPLE_A.tsv")
+        with open(call_tsv, "w") as f:
+            f.write("specimen\tlocus\twindow\tstart\tend\thaplotype\treads\tfreq\tspanning\n")
+            f.write("SAMPLE_A\tL1\tL1_W0001\t1\t100\t=\t50\t1.0\t50\n")
+
+        sheet_out = os.path.join(self.test_out, "amplicon_sheet_out")
+        sys.argv = [
+            "pyeuk", "build-sheet",
+            calls_dir,
+            sheet_out
+        ]
+        main()
+        self.assertTrue(os.path.exists(os.path.join(sheet_out, "sheet.tsv")))
+        self.assertTrue(os.path.exists(os.path.join(sheet_out, "haplotype_map.tsv")))
+        self.assertTrue(os.path.exists(os.path.join(sheet_out, "calls_long.tsv")))
+
 
 if __name__ == "__main__":
     unittest.main()
