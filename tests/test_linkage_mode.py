@@ -199,3 +199,62 @@ class TestLinkageMode(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestLinkageMethod(unittest.TestCase):
+    """Single linkage follows chains; Ward looks for compact blobs.
+
+    A transmission cluster is a chain -- A infects B infects C -- so the two linkages are not
+    interchangeable on this kind of data, and which is better is a property of the cohort
+    rather than a preference.
+    """
+
+    def setUp(self):
+        self.finder = CyclosporaClusterFinder(stringency=95.0, robust=True)
+        self.tmp = tempfile.mkdtemp()
+
+    @staticmethod
+    def _chain(n=10, step=0.03, n_far=15, seed=11):
+        """One transmission chain plus unrelated specimens.
+
+        Consecutive members of the chain are close; the ends are far apart. Ward penalises the
+        within-cluster spread this creates, single linkage does not.
+        """
+        rng = np.random.default_rng(seed)
+        pos = [i * step for i in range(n)] + [5.0 + rng.random() * 5.0 for _ in range(n_far)]
+        m = len(pos)
+        D = np.zeros((m, m))
+        for i in range(m):
+            for j in range(m):
+                D[i, j] = abs(pos[i] - pos[j])
+        ids = [f"C{i:02d}" for i in range(n)] + [f"F{i:02d}" for i in range(n_far)]
+        truth = {s: ("chain" if s.startswith("C") else s) for s in ids}
+        return pd.DataFrame(D, index=ids, columns=ids), truth
+
+    def test_single_linkage_keeps_a_chain_together(self):
+        D, truth = self._chain()
+        cl, _, _ = self.finder.find_clusters(D, None, output_dir=self.tmp,
+                                             cut_mode="distance", linkage_threshold=0.05,
+                                             linkage_method="single")
+        assign = dict(zip(cl["Seq_ID"], cl["Assigned_cluster"]))
+        chain = [s for s in truth if s.startswith("C")]
+        self.assertEqual(len({assign[s] for s in chain}), 1,
+                         "single linkage should follow the chain end to end")
+
+    def test_ward_splits_the_same_chain(self):
+        D, truth = self._chain()
+        cl, _, _ = self.finder.find_clusters(D, None, output_dir=self.tmp,
+                                             cut_mode="distance", linkage_threshold=0.05,
+                                             linkage_method="ward")
+        assign = dict(zip(cl["Seq_ID"], cl["Assigned_cluster"]))
+        chain = [s for s in truth if s.startswith("C")]
+        self.assertGreater(len({assign[s] for s in chain}), 1,
+                           "ward is expected to break a chain at this threshold; if it no "
+                           "longer does, the documented reason for offering single linkage "
+                           "needs rechecking")
+
+    def test_method_is_recorded(self):
+        D, _ = self._chain()
+        self.finder.find_clusters(D, None, output_dir=self.tmp, cut_mode="distance",
+                                  linkage_threshold=0.05, linkage_method="single")
+        self.assertEqual(self.finder.last_selection_meta.get("cut_mode"), "distance")

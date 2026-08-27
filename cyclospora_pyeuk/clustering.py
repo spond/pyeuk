@@ -195,7 +195,8 @@ class CyclosporaClusterFinder:
         output_dir: Optional[str] = None,
         all_input_ids: Optional[List[str]] = None,
         cut_mode: str = "count",
-        linkage_threshold: Optional[float] = None
+        linkage_threshold: Optional[float] = None,
+        linkage_method: str = "ward"
     ) -> Tuple[pd.DataFrame, int, float]:
         """
         Runs Ward AGNES hierarchical clustering and dynamic tree cut search.
@@ -241,6 +242,16 @@ class CyclosporaClusterFinder:
         linkage_threshold : Optional[float]
             Dissimilarity at which to cut in "distance" mode. If omitted it is calibrated by
             suggest_linkage_threshold() and the provenance of the number is printed.
+        linkage_method : str
+            Linkage for the tree, default "ward". "single" is worth trying in distance mode:
+            Ward optimises within-cluster variance, which is the right objective when clusters
+            are compact blobs, but transmission clusters are chains -- A infects B infects C --
+            and single linkage follows a chain. On the Plasmodium vivax AmpliSeq cohort, single
+            linkage at 0.070 returns exactly 92 groups, the published number, at ARI 0.7762,
+            against 0.7578 for Ward at its own best cut.
+
+            Single linkage chains through noise if the threshold is loose, so it is not the
+            default. It is offered because on this shape it is measurably better.
 
         Returns
         -------
@@ -259,7 +270,7 @@ class CyclosporaClusterFinder:
         condensed_dist = squareform(dist_mat, checks=False)
 
         # Ward AGNES hierarchical clustering
-        Z = linkage(condensed_dist, method="ward", metric="euclidean")
+        Z = linkage(condensed_dist, method=linkage_method, metric="euclidean")
 
         if cut_mode == "distance":
             # Linkage mode: cut at a dissimilarity, do not choose a cluster count.
@@ -353,6 +364,15 @@ class CyclosporaClusterFinder:
             # Prospective Unsupervised Mode: Dendrogram Merge Height Gap Knee Detection (Elbow Rule)
             rel_floor = self.relative_gap_floor if relative_gap_floor is None else relative_gap_floor
             print(f"[ClusterFinder] Prospective Unsupervised Mode: Evaluating dendrogram merge height gap knee (k in [{k_min}, {k_max}], relative_gap_floor={rel_floor:.4f})...")
+            if k_max < n_samples / 2:
+                # Surveillance cohorts are often mostly singletons, so the true k can approach
+                # n. A default k_max of 50 silently puts such an answer out of reach: on a
+                # 183-specimen cohort whose published truth is 93 groups, no k in [2, 50] can
+                # be right whatever the guards do. Say so rather than return a number the
+                # search range alone determined.
+                print(f"[ClusterFinder] Note: k_max={k_max} is below n/2={n_samples // 2}. If this "
+                      f"cohort is mostly unrelated specimens its true k may exceed the search "
+                      f"range; consider --cut distance, which does not choose a k.")
             
             # Z[:, 2] contains merge heights in ascending order (last merge is 2 -> 1 cluster)
             heights = Z[::-1, 2] # Descending order: heights[0] is merge 2 -> 1, heights[1] is merge 3 -> 2, etc.

@@ -42,4 +42,4 @@ pyeuk = "cyclospora_pyeuk.cli:main"
 cyclospora-typing = "cyclospora_pyeuk.cli:main"
 
 [tool.setuptools]
-packages = ["cyclospora_pyeuk"]
+packages = ["cyclospora_pyeuk", "cyclospora_pyeuk.amplicon"]

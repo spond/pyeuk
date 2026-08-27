@@ -125,10 +125,30 @@ def main():
              "surveillance, where most cases are unrelated. Choosing a count cannot represent a "
              "mostly-singleton structure and collapses to k=1 on such data.")
     cluster_parser.add_argument(
+        "--linkage-method", choices=["ward", "single", "average", "complete"], default="ward",
+        help="Linkage for the tree (default: ward). 'single' follows chains rather than "
+             "compact blobs, which is what a transmission cluster is, and recovers the exact "
+             "published cluster count on the P. vivax AmpliSeq cohort. It chains through noise "
+             "at a loose threshold, so it is not the default.")
+    cluster_parser.add_argument(
         "--linkage-threshold", type=float, default=None,
         help="Dissimilarity at which to cut in --cut distance mode. Omit to calibrate it from "
              "labelled pairs when --gold-clusters is given, or from the distance distribution "
              "otherwise; the provenance of the value is printed either way.")
+
+    # Commands 6-8: amplicon front end (BAMs -> haplotype sheet)
+    # Each forwards straight to the module's own parser rather than restating its flags here.
+    # Restating them is how the two copies drift, and the flags in question are the ones that
+    # decide the result: window width, spanning floor, and the three gates.
+    subparsers.add_parser(
+        "define-windows", add_help=False,
+        help="Choose analysis windows from the cohort's own reads (requires the amplicon extra)")
+    subparsers.add_parser(
+        "call-haplotypes", add_help=False,
+        help="Read a haplotype off each single spanning read (requires the amplicon extra)")
+    subparsers.add_parser(
+        "build-sheet", add_help=False,
+        help="Assemble the specimen x haplotype sheet from per-specimen calls")
 
     # Command 5: run-all
     runall_parser = subparsers.add_parser("run-all", help="Execute complete pipeline (Sheet Generation -> Distance Matrix -> Clustering)")
@@ -151,7 +171,14 @@ def main():
     runall_parser.add_argument("--k-max", type=int, default=50, help="Maximum number of clusters to search (default: 50)")
     runall_parser.add_argument("--relative-gap-floor", type=float, default=0.2200, help="Minimum relative merge-height gap fraction of tree height required for unsupervised knee selection (default: 0.2200)")
 
-    args = parser.parse_args()
+    # The three amplicon subcommands own their own flags and are forwarded verbatim, so their
+    # arguments must survive this parser rather than be rejected by it. Everything else is
+    # parsed strictly, so a typo in an existing command still fails loudly.
+    PASSTHROUGH = ("define-windows", "call-haplotypes", "build-sheet")
+    if len(sys.argv) > 1 and sys.argv[1] in PASSTHROUGH:
+        args, _ = parser.parse_known_args(sys.argv[1:2])
+    else:
+        args = parser.parse_args()
 
     if not args.command:
         parser.print_help()
@@ -230,8 +257,17 @@ def main():
             relative_gap_floor=args.relative_gap_floor,
             output_dir=args.output_dir,
             cut_mode=args.cut,
-            linkage_threshold=args.linkage_threshold
+            linkage_threshold=args.linkage_threshold,
+            linkage_method=args.linkage_method
         )
+
+    elif args.command in ("define-windows", "call-haplotypes", "build-sheet"):
+        # argparse has already consumed the subcommand; hand the remainder to the module.
+        from cyclospora_pyeuk.amplicon import build_sheet, define_windows, window_haplotypes
+        rest = sys.argv[2:]
+        {"define-windows": define_windows.main,
+         "call-haplotypes": window_haplotypes.main,
+         "build-sheet": build_sheet.main}[args.command](rest)
 
     elif args.command == "run-all":
         os.makedirs(args.output_dir, exist_ok=True)
