@@ -2,7 +2,7 @@
 
 <img src="docs/images/pyeuk_logo.jpg" align="right" width="140" alt="PyEuk Logo" />
 
-[![Version](https://img.shields.io/badge/version-0.3.0-blue.svg)](https://github.com/spond/pyeuk)
+[![Version](https://img.shields.io/badge/version-0.6.0-blue.svg)](https://github.com/spond/pyeuk)
 [![Python](https://img.shields.io/badge/python-3.8%2B-green.svg)](https://www.python.org/)
 [![License](https://img.shields.io/badge/license-Apache%202.0-orange.svg)](LICENSE)
 [![Speedup](https://img.shields.io/badge/speedup-99.2x-brightgreen.svg)]()
@@ -149,7 +149,7 @@ pyeuk cluster -m distance_matrix.csv -o clusters_detected
 
 ```python
 import pandas as pd
-from cyclospora_pyeuk import (
+from pyeuk import (
     generate_haplotype_sheet,
     learn_de_novo_haplotypes,
     PyEukDistanceEngine,

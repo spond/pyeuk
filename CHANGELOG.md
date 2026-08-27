@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.0] - 2026-08-27
+
+### Changed
+* **Top-Level Package Renamed to `pyeuk`**:
+  - Renamed top-level Python import package from `cyclospora_pyeuk` to `pyeuk` to reflect panel- and species-agnostic eukaryotic MLST genotyping capabilities across *Cyclospora*, *Cryptosporidium*, *Giardia*, *Plasmodium vivax*, and nematodes (resolves #18).
+  - Maintained complete backward compatibility via a `cyclospora_pyeuk` deprecation shim package emitting `DeprecationWarning` and re-exporting all API symbols and submodules.
+  - Updated `pyproject.toml` distribution configuration (`packages = ["pyeuk", "pyeuk.amplicon", "cyclospora_pyeuk", "cyclospora_pyeuk.amplicon"]`).
+
+---
+
 ## [0.5.0] - 2026-08-27
 
 ### Added

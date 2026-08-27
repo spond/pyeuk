@@ -1,10 +1,10 @@
 """
-Unit tests for cyclospora_pyeuk.naming:
+Unit tests for pyeuk.naming:
 Bidirectional naming and parsing contract, round-trip locus invariants, and edge case handling.
 """
 
 import unittest
-from cyclospora_pyeuk.naming import parse_locus_name, name_haplotype, format_de_novo_haplotype_name
+from pyeuk.naming import parse_locus_name, name_haplotype, format_de_novo_haplotype_name
 
 
 class TestNamingContract(unittest.TestCase):

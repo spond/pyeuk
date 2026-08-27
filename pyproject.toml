@@ -3,14 +3,14 @@ requires = ["setuptools>=61"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "cyclospora_pyeuk"
-version = "0.5.0"
-description = "Modern CDC Cyclospora cayetanensis MLST typing, Eukaryotyping ensemble distance engine, and outbreak cluster finder"
+name = "pyeuk"
+version = "0.6.0"
+description = "Modern Python package for eukaryotic amplicon MLST genotyping, Eukaryotyping ensemble distance engine, and outbreak cluster finder"
 readme = "README.md"
 requires-python = ">=3.8"
 license = { text = "Apache-2.0" }
 authors = [{ name = "BRC-Analytics / CDC Modernization Team" }]
-keywords = ["MLST", "cgMLST", "Cyclospora", "Cryptosporidium", "outbreak", "genotyping", "eukaryotyping"]
+keywords = ["MLST", "cgMLST", "Cyclospora", "Cryptosporidium", "Plasmodium", "outbreak", "genotyping", "eukaryotyping"]
 classifiers = [
     "Development Status :: 4 - Beta",
     "Intended Audience :: Science/Research",
@@ -38,8 +38,8 @@ Source = "https://github.com/spond/pyeuk"
 Issues = "https://github.com/spond/pyeuk/issues"
 
 [project.scripts]
-pyeuk = "cyclospora_pyeuk.cli:main"
-cyclospora-typing = "cyclospora_pyeuk.cli:main"
+pyeuk = "pyeuk.cli:main"
+cyclospora-typing = "pyeuk.cli:main"
 
 [tool.setuptools]
-packages = ["cyclospora_pyeuk", "cyclospora_pyeuk.amplicon"]
+packages = ["pyeuk", "pyeuk.amplicon", "cyclospora_pyeuk", "cyclospora_pyeuk.amplicon"]

@@ -25,7 +25,7 @@ import unittest
 import numpy as np
 import pandas as pd
 
-from cyclospora_pyeuk.clustering import CyclosporaClusterFinder
+from pyeuk.clustering import CyclosporaClusterFinder
 
 
 def _blocks_plus_singletons(n_blocks=3, block_size=6, n_singletons=30, seed=7):

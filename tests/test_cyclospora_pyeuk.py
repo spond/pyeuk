@@ -1,14 +1,14 @@
 """
-Unit tests for cyclospora_pyeuk python package.
+Unit tests for pyeuk python package.
 """
 
 import os
 import unittest
 import numpy as np
 import pandas as pd
-from cyclospora_pyeuk.haplotype_sheet import generate_haplotype_sheet
-from cyclospora_pyeuk.distance_engine import PyEukDistanceEngine
-from cyclospora_pyeuk.clustering import CyclosporaClusterFinder
+from pyeuk.haplotype_sheet import generate_haplotype_sheet
+from pyeuk.distance_engine import PyEukDistanceEngine
+from pyeuk.clustering import CyclosporaClusterFinder
 
 
 class TestCyclosporaPyEuk(unittest.TestCase):
@@ -77,7 +77,7 @@ class TestCyclosporaPyEuk(unittest.TestCase):
 
     def test_external_assembly_ingestion(self):
         import tempfile
-        from cyclospora_pyeuk.haplotype_sheet import generate_haplotype_sheet_from_assemblies
+        from pyeuk.haplotype_sheet import generate_haplotype_sheet_from_assemblies
 
         # Create temporary FASTA with mock assembled contigs
         with tempfile.NamedTemporaryFile(mode="w", suffix=".fasta", delete=False) as f:
@@ -100,7 +100,7 @@ class TestCyclosporaPyEuk(unittest.TestCase):
 
     def test_de_novo_haplotype_discovery(self):
         import tempfile
-        from cyclospora_pyeuk.haplotype_sheet import learn_de_novo_haplotypes
+        from pyeuk.haplotype_sheet import learn_de_novo_haplotypes
 
         # Create temporary FASTA without any predefined references
         with tempfile.NamedTemporaryFile(mode="w", suffix=".fasta", delete=False) as f:
@@ -135,9 +135,9 @@ class TestCyclosporaPyEuk(unittest.TestCase):
 
     def test_example_data_pipeline(self):
         """Tests that the example_data directory works across standard, zip, and de novo modes."""
-        from cyclospora_pyeuk.haplotype_sheet import generate_haplotype_sheet, learn_de_novo_haplotypes
-        from cyclospora_pyeuk.distance_engine import PyEukDistanceEngine
-        from cyclospora_pyeuk.clustering import CyclosporaClusterFinder
+        from pyeuk.haplotype_sheet import generate_haplotype_sheet, learn_de_novo_haplotypes
+        from pyeuk.distance_engine import PyEukDistanceEngine
+        from pyeuk.clustering import CyclosporaClusterFinder
 
         # 1. Test from directory
         sheet_dir = generate_haplotype_sheet("example_data/specimens")
@@ -262,7 +262,7 @@ class TestCyclosporaPyEuk(unittest.TestCase):
 
     def test_parse_locus_name_edge_cases(self):
         """Tests that locus name parsing handles diverse delimiter formats without false splits."""
-        from cyclospora_pyeuk.distance_engine import parse_locus_name
+        from pyeuk.distance_engine import parse_locus_name
         cases = {
             "Cp_HSP70_a1": "Cp_HSP70_a1",
             "Cp_HSP90_H01_508B": "Cp_HSP90",
@@ -315,9 +315,9 @@ class TestCyclosporaPyEuk(unittest.TestCase):
 
     def test_cryptosporidium_pipeline(self):
         """Tests that PyEuk runs reference-free de novo typing and outbreak clustering on Cryptosporidium."""
-        from cyclospora_pyeuk.haplotype_sheet import learn_de_novo_haplotypes
-        from cyclospora_pyeuk.distance_engine import PyEukDistanceEngine
-        from cyclospora_pyeuk.clustering import CyclosporaClusterFinder
+        from pyeuk.haplotype_sheet import learn_de_novo_haplotypes
+        from pyeuk.distance_engine import PyEukDistanceEngine
+        from pyeuk.clustering import CyclosporaClusterFinder
         from sklearn.metrics import adjusted_rand_score
 
         sheet_dn, learned = learn_de_novo_haplotypes("example_data/cryptosporidium/cohort_contigs.fasta")
@@ -340,9 +340,9 @@ class TestCyclosporaPyEuk(unittest.TestCase):
 
     def test_giardia_pipeline(self):
         """Tests that PyEuk runs reference-free de novo typing and outbreak clustering on Giardia."""
-        from cyclospora_pyeuk.haplotype_sheet import learn_de_novo_haplotypes
-        from cyclospora_pyeuk.distance_engine import PyEukDistanceEngine
-        from cyclospora_pyeuk.clustering import CyclosporaClusterFinder
+        from pyeuk.haplotype_sheet import learn_de_novo_haplotypes
+        from pyeuk.distance_engine import PyEukDistanceEngine
+        from pyeuk.clustering import CyclosporaClusterFinder
         from sklearn.metrics import adjusted_rand_score
 
         sheet_dn, learned = learn_de_novo_haplotypes("example_data/giardia/cohort_contigs.fasta")
@@ -371,8 +371,8 @@ class TestCyclosporaPyEuk(unittest.TestCase):
         2. Under Complete linkage, Plain unweighted Hamming drops to ARI = 0.6503 while PyEuk wIBS achieves ARI = 1.0000.
         3. Under Ward linkage, Plain unweighted Hamming drops to ARI = 0.6503 while PyEuk wIBS achieves ARI = 1.0000.
         """
-        from cyclospora_pyeuk.haplotype_sheet import learn_de_novo_haplotypes
-        from cyclospora_pyeuk.distance_engine import PyEukDistanceEngine
+        from pyeuk.haplotype_sheet import learn_de_novo_haplotypes
+        from pyeuk.distance_engine import PyEukDistanceEngine
         from scipy.spatial.distance import pdist, squareform
         from scipy.cluster.hierarchy import linkage, cut_tree
         from sklearn.metrics import adjusted_rand_score
@@ -420,7 +420,7 @@ class TestCyclosporaPyEuk(unittest.TestCase):
         Specimens with complementary locus dropouts (0 mutually called loci) must receive
         maximum distance (1.0), NEVER distance 0.0 (genetic identity).
         """
-        from cyclospora_pyeuk.distance_engine import PyEukDistanceEngine
+        from pyeuk.distance_engine import PyEukDistanceEngine
         
         # Specimen 1: only Locus 1 called
         # Specimen 2: only Locus 2 called (0 overlap with Specimen 1)
@@ -449,7 +449,7 @@ class TestCyclosporaPyEuk(unittest.TestCase):
         Haplotype sheet generation must prevent sample ID collisions between specimen and background dirs
         and must not silently emit background controls as specimen case rows.
         """
-        from cyclospora_pyeuk.haplotype_sheet import generate_haplotype_sheet
+        from pyeuk.haplotype_sheet import generate_haplotype_sheet
         import tempfile
         
         with tempfile.TemporaryDirectory() as spec_dir, tempfile.TemporaryDirectory() as bg_dir:
@@ -471,7 +471,7 @@ class TestCyclosporaPyEuk(unittest.TestCase):
         Specimen locus completeness must measure the fraction of called loci, NOT allele-column density.
         Adding 100 unused allele columns to the sheet must not alter locus completeness or filter out valid specimens.
         """
-        from cyclospora_pyeuk.distance_engine import PyEukDistanceEngine
+        from pyeuk.distance_engine import PyEukDistanceEngine
         
         # Specimen called at all 4 loci (1 allele each out of 4 columns)
         df_base = pd.DataFrame([
@@ -508,7 +508,7 @@ class TestCyclosporaPyEuk(unittest.TestCase):
         Unobserved allele columns (p == 0.0) and fixed columns (p == 1.0) must not inflate the wIBS denominator
         with dead weight. Adding unobserved reference panel columns must leave pairwise distances bit-identical.
         """
-        from cyclospora_pyeuk.distance_engine import PyEukDistanceEngine
+        from pyeuk.distance_engine import PyEukDistanceEngine
         
         df_base = pd.DataFrame([
             {"Seq_ID": "SPEC_01", "L1_H01": "X", "L1_H02": "", "L2_H01": "X", "L2_H02": ""},
@@ -538,7 +538,7 @@ class TestCyclosporaPyEuk(unittest.TestCase):
         Verifies that PyEuk correctly supports Heterozygosity (2p(1-p)), Inverted KING (sqrt(p(1-p))),
         Legacy KING (1/sqrt(p(1-p))), Uniform (1.0) weighting schemes and MAF thresholding.
         """
-        from cyclospora_pyeuk.distance_engine import PyEukDistanceEngine
+        from pyeuk.distance_engine import PyEukDistanceEngine
         
         # 10 specimens with 1 balanced locus and 1 rare singleton locus
         df = pd.DataFrame({
@@ -572,7 +572,7 @@ class TestCyclosporaPyEuk(unittest.TestCase):
         Under presence/absence indicator encoding, a specimen carrying a private singleton must NOT
         saturate pairwise distance to 1.0 against members of its true outbreak cluster.
         """
-        from cyclospora_pyeuk.distance_engine import PyEukDistanceEngine
+        from pyeuk.distance_engine import PyEukDistanceEngine
         from scipy.spatial.distance import squareform
         from scipy.cluster.hierarchy import linkage, cut_tree
         from sklearn.metrics import adjusted_rand_score
@@ -617,7 +617,7 @@ class TestCyclosporaPyEuk(unittest.TestCase):
         Verifies that project_psd=False returns raw pairwise distances, while project_psd=True
         guarantees that the double-centered Gram matrix has no negative eigenvalues.
         """
-        from cyclospora_pyeuk.distance_engine import PyEukDistanceEngine
+        from pyeuk.distance_engine import PyEukDistanceEngine
 
         df = pd.DataFrame([
             {"Seq_ID": f"S{i}", "L1_H1": "X" if i%2==0 else "", "L1_H2": "X" if i%2!=0 else "",
@@ -643,7 +643,7 @@ class TestCyclosporaPyEuk(unittest.TestCase):
         Verifies that k_min is strictly honored in label-free unsupervised clustering mode,
         even when k=2 has a dominant merge height gap.
         """
-        from cyclospora_pyeuk.clustering import CyclosporaClusterFinder
+        from pyeuk.clustering import CyclosporaClusterFinder
         
         # 10 samples in 3 distinct groups: Group 1 (4 samples), Group 2 (3 samples), Group 3 (3 samples)
         # Groups 1 and 2 are closer together than to Group 3
@@ -671,7 +671,7 @@ class TestCyclosporaPyEuk(unittest.TestCase):
         Verifies that relative_gap_floor can be configured/overridden to prevent k=1 single-cluster collapse
         when merge height gaps are smaller than the 0.2200 floor.
         """
-        from cyclospora_pyeuk.clustering import CyclosporaClusterFinder
+        from pyeuk.clustering import CyclosporaClusterFinder
 
         # 10 samples: 2 samples in 1A, 2 in 1B, 6 in Group 2
         # Merge gap for 1A vs 1B (k=3) is small (rel_gap < 0.05)

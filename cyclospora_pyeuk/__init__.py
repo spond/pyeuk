@@ -1,33 +1,28 @@
 """
-cyclospora_pyeuk: Modern Python package for CDC Cyclospora cayetanensis MLST Genotyping Workflow.
-Supports Illumina short-reads, Oxford Nanopore long-reads (ONT), and PacBio HiFi.
+Deprecated backward-compatibility shim for cyclospora_pyeuk.
+Use `pyeuk` instead.
 """
 
-from .haplotype_sheet import (
+import warnings
+from pyeuk import (
+    __version__,
+    __all__,
     generate_haplotype_sheet,
     generate_haplotype_sheet_from_assemblies,
     learn_de_novo_haplotypes,
     format_de_novo_haplotype_name,
-)
-from .naming import (
     name_haplotype,
     parse_locus_name,
+    PyEukDistanceEngine,
+    CyclosporaClusterFinder,
+    JunctionMicroAssembler,
+    NanoporeAmpliconProcessor,
 )
-from .distance_engine import PyEukDistanceEngine
-from .clustering import CyclosporaClusterFinder
-from .micro_assembly import JunctionMicroAssembler
-from .ont_processor import NanoporeAmpliconProcessor
+from pyeuk import amplicon
 
-__version__ = "0.5.0"
-__all__ = [
-    "generate_haplotype_sheet",
-    "generate_haplotype_sheet_from_assemblies",
-    "learn_de_novo_haplotypes",
-    "format_de_novo_haplotype_name",
-    "name_haplotype",
-    "parse_locus_name",
-    "PyEukDistanceEngine",
-    "CyclosporaClusterFinder",
-    "JunctionMicroAssembler",
-    "NanoporeAmpliconProcessor",
-]
+warnings.warn(
+    "Importing from 'cyclospora_pyeuk' is deprecated and will be removed in a future release. "
+    "Please import from 'pyeuk' instead.",
+    DeprecationWarning,
+    stacklevel=2,
+)

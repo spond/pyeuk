@@ -6,7 +6,7 @@ import os
 import sys
 import shutil
 import unittest
-from cyclospora_pyeuk.cli import main
+from pyeuk.cli import main
 
 class TestPyEukCLI(unittest.TestCase):
 
