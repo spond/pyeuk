@@ -11,31 +11,7 @@ from typing import Tuple, List, Dict, Optional, Union
 from numba import njit, prange
 
 
-def parse_locus_name(col: str) -> str:
-    r"""
-    Extracts the homologous locus window name from a marker or haplotype identifier.
-    Correctly handles:
-    - CDC format: Nu_378_PART_A_Hap_4 -> Nu_378_PART_A
-    - De novo format: gp60_L752bp.H01_9180 -> gp60
-    - Haplotype delimiters: _Hap_\d+, .H\d+, _H\d+, _NOVEL_\d+, .X_\d+
-    - Preserves locus names with underscores like Cp_HSP70, Cp_HSP90
-    - Strips amplicon length tags like _L245bp
-    """
-    sub = str(col).strip()
-    patterns = [
-        r"_Hap_\d+",
-        r"\.H\d+(_[A-F0-9]+)?",
-        r"_H\d+(_[A-F0-9]+)?",
-        r"_(NOVEL|novel)_\d+",
-        r"\.X_\d+",
-    ]
-    for pat in patterns:
-        sub = re.sub(pat, "", sub)
-    sub = re.sub(r"_L\d+bp$", "", sub)
-    sub = sub.rstrip("_")
-    if "Junction" in sub or ("Mt_" in sub and "Cmt" in sub):
-        return "Mt_Cmt"
-    return sub
+from cyclospora_pyeuk.naming import parse_locus_name
 
 
 @njit(parallel=True, fastmath=True)

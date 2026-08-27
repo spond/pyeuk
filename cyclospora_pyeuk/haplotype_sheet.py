@@ -268,51 +268,11 @@ def generate_haplotype_sheet_from_assemblies(
     return genotype_sheet
 
 
-def format_de_novo_haplotype_name(
-    locus_name: str,
-    sequence: str,
-    rank: int,
-    include_length: bool = True,
-    include_hash: bool = True
-) -> str:
-    """
-    Constructs a deterministic, informative, content-addressable de novo haplotype identifier:
-    `<Locus>_L<Length>bp.H<Rank>_<Hash4>` (e.g. `Nu_378_PART_A_L245bp.H01_7A3F`).
-
-    Parameters
-    ----------
-    locus_name : str
-        Locus or amplicon partition name (e.g. 'Nu_378_PART_A', 'Mt_Cmt', 'Locus_01').
-    sequence : str
-        Nucleotide sequence of the assembled haplotype.
-    rank : int
-        Prevalence rank in cohort (1 = most common, 2 = second, etc.).
-    include_length : bool
-        Whether to embed sequence length in base pairs (default: True).
-    include_hash : bool
-        Whether to embed 4-character deterministic uppercase MD5 hash (default: True).
-
-    Returns
-    -------
-    str
-        Canonical, globally reproducible haplotype identifier.
-    """
-    import hashlib
-
-    # Clean locus name
-    clean_locus = locus_name.strip().replace(" ", "_")
-    parts = [clean_locus]
-    if include_length:
-        parts.append(f"L{len(sequence)}bp")
-
-    prefix = "_".join(parts)
-    rank_str = f"H{rank:02d}"
-
-    if include_hash:
-        short_hash = hashlib.md5(sequence.upper().strip().encode("utf-8")).hexdigest()[:4].upper()
-        return f"{prefix}.{rank_str}_{short_hash}"
-    else:
-        return f"{prefix}.{rank_str}"
+from cyclospora_pyeuk.naming import (
+    format_de_novo_haplotype_name,
+    name_haplotype,
+    parse_locus_name,
+)
 
 
 def learn_de_novo_haplotypes(

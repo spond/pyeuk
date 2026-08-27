@@ -9,6 +9,10 @@ from .haplotype_sheet import (
     learn_de_novo_haplotypes,
     format_de_novo_haplotype_name,
 )
+from .naming import (
+    name_haplotype,
+    parse_locus_name,
+)
 from .distance_engine import PyEukDistanceEngine
 from .clustering import CyclosporaClusterFinder
 from .micro_assembly import JunctionMicroAssembler
@@ -20,6 +24,8 @@ __all__ = [
     "generate_haplotype_sheet_from_assemblies",
     "learn_de_novo_haplotypes",
     "format_de_novo_haplotype_name",
+    "name_haplotype",
+    "parse_locus_name",
     "PyEukDistanceEngine",
     "CyclosporaClusterFinder",
     "JunctionMicroAssembler",

@@ -27,6 +27,11 @@ dependencies = [
     "numba>=0.53.0",
 ]
 
+[project.optional-dependencies]
+amplicon = [
+    "pysam>=0.22",
+]
+
 [project.urls]
 Homepage = "https://github.com/spond/pyeuk"
 Source = "https://github.com/spond/pyeuk"
