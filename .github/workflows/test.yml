@@ -1,0 +1,42 @@
+name: tests
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # The floor and the current release. A package that claims >=3.9 should be tested at
+        # 3.9, otherwise the claim is untested.
+        python-version: ["3.9", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Install with the amplicon extra
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install ".[amplicon]" pytest
+      - name: Run the test suite
+        run: pytest tests -q
+      - name: Check the console entry points respond
+        run: |
+          pyeuk --help
+          cyclospora-typing --help
+          pyeuk define-windows --help
+          pyeuk call-haplotypes --help
+          pyeuk build-sheet --help
+      - name: Core install must work without pysam
+        # The amplicon steps import pysam on first use so that the core package stays usable
+        # for anyone clustering a sheet from another pipeline. If that ever regresses to a
+        # module-scope import, this step fails.
+        run: |
+          python -m pip uninstall -y pysam
+          python -c "import cyclospora_pyeuk, cyclospora_pyeuk.clustering, cyclospora_pyeuk.distance_engine; print('core imports without pysam')"
+          python -c "import cyclospora_pyeuk.amplicon; print('amplicon module imports without pysam')"
