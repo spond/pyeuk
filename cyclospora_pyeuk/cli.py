@@ -115,6 +115,20 @@ def main():
     cluster_parser.add_argument("--k-min", type=int, default=2, help="Minimum number of clusters to search (default: 2)")
     cluster_parser.add_argument("--k-max", type=int, default=50, help="Maximum number of clusters to search (default: 50)")
     cluster_parser.add_argument("--relative-gap-floor", type=float, default=0.2200, help="Minimum relative merge-height gap fraction of tree height required for unsupervised knee selection (default: 0.2200)")
+    cluster_parser.add_argument(
+        "--cut", choices=["count", "distance"], default="count",
+        help="How to cut the tree. 'count' (default) chooses a number of clusters from the "
+             "largest merge-height gap, subject to a minimum gap and a minimum cluster size -- "
+             "the right question for a closed outbreak investigation. 'distance' cuts at a "
+             "fixed dissimilarity instead, with no cluster count and no gap requirement, and "
+             "returns specimens with no near neighbour as singletons -- the right question for "
+             "surveillance, where most cases are unrelated. Choosing a count cannot represent a "
+             "mostly-singleton structure and collapses to k=1 on such data.")
+    cluster_parser.add_argument(
+        "--linkage-threshold", type=float, default=None,
+        help="Dissimilarity at which to cut in --cut distance mode. Omit to calibrate it from "
+             "labelled pairs when --gold-clusters is given, or from the distance distribution "
+             "otherwise; the provenance of the value is printed either way.")
 
     # Command 5: run-all
     runall_parser = subparsers.add_parser("run-all", help="Execute complete pipeline (Sheet Generation -> Distance Matrix -> Clustering)")
@@ -214,7 +228,9 @@ def main():
             k_min=args.k_min,
             k_max=args.k_max,
             relative_gap_floor=args.relative_gap_floor,
-            output_dir=args.output_dir
+            output_dir=args.output_dir,
+            cut_mode=args.cut,
+            linkage_threshold=args.linkage_threshold
         )
 
     elif args.command == "run-all":
