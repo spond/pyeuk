@@ -73,8 +73,9 @@ import argparse
 import os
 import random
 import sys
+import time
 from collections import Counter, defaultdict
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ProcessPoolExecutor
 
 # pysam is an OPTIONAL dependency, declared under the `amplicon` extra. Importing it at module
 # scope would make `import pyeuk` fail for anyone who installed the core package to
@@ -346,6 +347,20 @@ def covered(bam, min_depth, contigs=None):
     return lo, hi
 
 
+def _scan_bam(task):
+    """Module-level, picklable per-BAM coverage worker for the PHASE 1 process pool.
+
+    Phase 1 (the per-BAM coverage scan) is the bottleneck on this free-threaded build. Its
+    cost is pysam.count_coverage over deep amplicons: that is C code, but pysam re-enables the
+    GIL when it is imported (it does not declare itself free-threading safe), so count_coverage
+    holds the process-wide GIL and a ThreadPoolExecutor serialises the scan -- 20 deep BAMs run
+    one at a time. Running each BAM in its own interpreter (ProcessPoolExecutor) gives each its
+    own GIL, so the scan actually parallelises. Pure function of its inputs -> returns the
+    (lo, hi) covered-bounds dicts for one BAM, exactly as covered() does."""
+    bam, min_depth = task
+    return covered(bam, min_depth)
+
+
 # NOTES -- optimization #4 (Rust kernel), a documented follow-up, NOT implemented here.
 # No Rust toolchain is present in this environment (`which cargo`/`which rustc` are empty), so
 # a native kernel would not build. Were one added later, the profitable surface is small and
@@ -360,6 +375,46 @@ def covered(bam, min_depth, contigs=None):
 # the chosen window can shift. Given the histogram is already tiny (a few hundred keys per
 # contig) after single-pass + subsampling, the Python cost is no longer the bottleneck, so
 # this is low priority next to parallelising across libraries at the workflow level.
+
+
+
+def _process_contig(task):
+    """Module-level, picklable per-contig worker so it can run in a ProcessPoolExecutor
+    (separate interpreters -> no shared GIL, so the Python-level read scan actually
+    parallelises). Pure function of its inputs; returns (contig, width, anchor, log)."""
+    (c, lo_c, hi_c, bams, max_reads_per_window, seed, spanning_target,
+     window_max, window_min, width_step, min_spanning) = task
+    iv = read_intervals(bams, c)
+    iv = subsample_counter(iv, max_reads_per_window, seed)
+    n = sum(iv.values())
+    med = _nth_length(iv, n // 2)
+    if spanning_target is not None:
+        idx = max(0, int(n * (1.0 - spanning_target)) - 1)
+        cap = window_max or 10 ** 9
+        pv = _nth_length(iv, idx)
+        w = max(window_min, min(cap, pv))
+        pct = int((1 - spanning_target) * 100)
+        log = (f"[define_windows]   {c}: n={n} median={med} p{pct}={pv} "
+               f"-> window {w} (legacy percentile rule)")
+        return c, w, lo_c, log
+    lines = []
+    s_core, e_core = spannable_core(iv, lo_c, hi_c, min_spanning, window_min)
+    if (s_core, e_core) != (lo_c, hi_c):
+        lines.append(f"[define_windows]   {c}: covered {lo_c}-{hi_c} -> spannable core "
+                     f"{s_core}-{e_core} ({e_core - s_core + 1} bp)")
+    top = min(hi_c - lo_c + 1, window_max or (hi_c - lo_c + 1))
+    widths = list(range(window_min, top + 1, width_step))
+    if top >= window_min and top not in widths:
+        widths.append(top)
+    prof = spanning_profile_hist(iv, s_core, e_core, widths)
+    ok = [w for w, f in prof.items() if f >= min_spanning]
+    w = max(ok) if ok else window_min
+    shown = ", ".join(f"{ww}:{100*prof[ww]:.0f}%" for ww in sorted(prof)[:9])
+    lines.append(
+        f"[define_windows]   {c}: n={n} median_read={med} "
+        f"spanning[{shown}] -> window {w}"
+        f"{'' if ok else ' (NOTHING met --min-spanning; fell back to --window-min)'}")
+    return c, w, s_core, "\n".join(lines)
 
 
 def main(argv=None):
@@ -419,18 +474,23 @@ def main(argv=None):
         stride = len(bams) / a.sample
         bams = [bams[int(i * stride)] for i in range(a.sample)]
 
-    # Covered bounds per BAM, restricted to contigs that actually carry reads (see covered()).
-    # Independent per BAM, so scanned in parallel; count_coverage releases the GIL.
+    # PHASE 1 -- covered bounds per BAM, restricted to contigs that actually carry reads
+    # (see covered()). Independent per BAM, so scanned in parallel. This is the hot phase: its
+    # cost is pysam.count_coverage over deep amplicons, C code that nonetheless runs under the
+    # GIL pysam re-enables on import (a free-threaded interpreter), so a thread pool serialises
+    # it. A PROCESS pool gives each BAM its own interpreter and its own GIL, so the scan truly
+    # parallelises. ex.map preserves bams order, so recombination is stable regardless of worker
+    # count (the bounds are a per-contig median, so append order does not matter anyway).
     lo_all, hi_all = defaultdict(list), defaultdict(list)
 
-    def scan(b):
-        return covered(b, a.min_depth)
-
+    t_phase1 = time.perf_counter()
     if threads > 1 and len(bams) > 1:
-        with ThreadPoolExecutor(max_workers=threads) as ex:
-            scanned = list(ex.map(scan, bams))
+        scan_tasks = [(b, a.min_depth) for b in bams]
+        with ProcessPoolExecutor(max_workers=min(threads, len(bams))) as ex:
+            scanned = list(ex.map(_scan_bam, scan_tasks))
     else:
-        scanned = [scan(b) for b in bams]
+        scanned = [covered(b, a.min_depth) for b in bams]
+    phase1_s = time.perf_counter() - t_phase1
     for lo, hi in scanned:
         for c in lo:
             lo_all[c].append(lo[c])
@@ -442,7 +502,8 @@ def main(argv=None):
         # deep enough produced an empty BED. Keep the informative message.
         sys.exit("no aligned reads in the sampled BAMs")
 
-    print(f"[define_windows] scanned {len(bams)} BAMs", file=sys.stderr)
+    print(f"[define_windows] scanned {len(bams)} BAMs in {phase1_s:.1f}s "
+          f"(phase 1: per-BAM coverage scan)", file=sys.stderr)
 
     # covered bounds first -- the width search needs the interval it will tile
     bounds = {}
@@ -505,11 +566,22 @@ def main(argv=None):
     # preserves input order, so both the assembled dicts and the stderr log are in sorted
     # contig order regardless of how many threads ran -- the BED cannot depend on thread count.
     keys = sorted(bounds)
+    t_phase2 = time.perf_counter()
     if threads > 1 and len(keys) > 1:
-        with ThreadPoolExecutor(max_workers=threads) as ex:
-            results = list(ex.map(process, keys))
+        tasks = [(c, bounds[c][0], bounds[c][1], bams,
+                  a.max_reads_per_window, a.seed, a.spanning_target,
+                  a.window_max, a.window_min, a.width_step, a.min_spanning)
+                 for c in keys]
+        # ProcessPoolExecutor: separate interpreters dodge the GIL that pysam re-enables,
+        # so the per-contig read scan runs truly in parallel. map() preserves order, so the
+        # BED and the stderr log stay in sorted-contig order regardless of worker count.
+        with ProcessPoolExecutor(max_workers=min(threads, len(keys))) as ex:
+            results = list(ex.map(_process_contig, tasks))
     else:
         results = [process(c) for c in keys]
+    phase2_s = time.perf_counter() - t_phase2
+    print(f"[define_windows] selected windows for {len(keys)} contigs in {phase2_s:.1f}s "
+          f"(phase 2: per-contig window search)", file=sys.stderr)
 
     win = {}
     anchor = {}
