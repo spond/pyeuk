@@ -5,9 +5,11 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.7.0] - 2026-09-03
 
 ### Added
+* **Cluster sweep diagnostic (default output of `cluster`)**:
+  - `CyclosporaClusterFinder.cluster_sweep()` reports the *range* of cluster counts the data supports, **whether that count is determined** (agreement of the merge-gap knee, silhouette, and Tibshirani gap statistic), a per-branch **confidence tree** (branch support = 1 − mean cross-cluster co-assignment over bootstrap resamples), the **stable cores** (co-assignment ≥ 0.90), and a per-k sweep table. Writes a `*_SWEEP.json` and a Newick confidence tree; deterministic for a fixed seed.
 * **Graphical Report Generation (`pyeuk report`)**:
   - New `pyeuk.report` module rendering the `cluster_sweep()` result (dict or `*_SWEEP.json`) into a single self-contained HTML report via `render(sweep, dist_df=None, flavor="dashboard", theme="studio")`. No JavaScript: charts are inline SVG and the optional distance heatmap is an embedded PNG.
   - Three **flavors**: `dashboard` (default), `clinical`, and `narrative`. Confident cohorts are reported as a single green number, fuzzy cohorts as an amber range, and stable cores are drawn directly on the confidence tree as numbered bars.
@@ -15,6 +17,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Portable output: `<meta charset="utf-8">` plus HTML entities so the document contains **zero raw non-ASCII bytes** and renders correctly under any server/charset.
   - New `pyeuk report SWEEP.json -o report.html [--flavor] [--theme] [--matrix]` CLI subcommand, and a `--report` flag on `pyeuk cluster` (with `--report-flavor` / `--report-theme`) to emit the HTML alongside the `SWEEP.json` in one step.
   - Distance heatmap uses the new optional `pyeuk[report]` extra (`pillow>=9`); if Pillow is absent the heatmap is skipped gracefully with a note instead of crashing.
+
+### Changed
+* **`cluster` reports a range, not a forced single `k`**: the default clustering output is now the sweep diagnostic (count range + confidence tree + stable cores). `--single-k` restores the legacy single-partition knee cut (merge-height gap) for downstream steps that need one flat assignment.
+
+### Performance
+* **`define-windows` ≈10× on deep panels**: single-pass and process-parallel — a 66-BAM *Cyclospora* cohort drops from ~2.4 h to ~14 min, byte-identical output (#20).
+* **`call-haplotypes` sub-quadratic denoise (lossless)**: the O(unique²) UNOISE fold is replaced by a deletion-neighbourhood (SymSpell) index for the default `max_edits=1` — byte-identical output, removing the high-diversity long tail; optional per-window read subsampling via `--max-reads-per-window` (opt-in) (#21).
 
 ---
 
