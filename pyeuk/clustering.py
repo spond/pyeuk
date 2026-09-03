@@ -569,7 +569,8 @@ class CyclosporaClusterFinder:
 
         def rec(node: int) -> str:
             if node < n:
-                return str(labels[node]).replace("(", "_").replace(")", "_").replace(",", "_").replace(":", "_")
+                return (str(labels[node]).replace("(", "_").replace(")", "_").replace(",", "_")
+                        .replace(":", "_").replace(";", "_").replace(" ", "_"))
             a, b = int(Z[node - n, 0]), int(Z[node - n, 1])
             s = support[node - n]
             return f"({rec(a)},{rec(b)}){s:.3f}"
@@ -585,18 +586,19 @@ class CyclosporaClusterFinder:
         cluster, because the data does not reproduce that division. Sweeping tau turns the
         confidence tree into a range of defensible cluster counts.
         """
-        import sys as _sys
-        _sys.setrecursionlimit(max(10000, n * 4))
-
-        def rec(node: int) -> int:
-            if node < n:
-                return 1
-            if support[node - n] >= tau:
-                a, b = int(Z[node - n, 0]), int(Z[node - n, 1])
-                return rec(a) + rec(b)
-            return 1
-
-        return rec(2 * n - 2)
+        # iterative walk (no recursion limit / C-stack risk on deep trees): a leaf, or a
+        # subtree whose top split is below tau, contributes exactly one cluster; a confident
+        # split pushes both children to be counted separately.
+        count = 0
+        stack = [2 * n - 2]
+        while stack:
+            node = stack.pop()
+            if node < n or support[node - n] < tau:
+                count += 1
+            else:
+                stack.append(int(Z[node - n, 0]))
+                stack.append(int(Z[node - n, 1]))
+        return count
 
     def cluster_sweep(
         self,
@@ -645,7 +647,8 @@ class CyclosporaClusterFinder:
             kk = len(set(lab))
             sil = float(silhouette_score(D, lab, metric="precomputed")) if 2 <= kk < n else float("nan")
             singles = int(sum(1 for c in set(lab) if list(lab).count(c) == 1))
-            sweep.append({"k": k, "clusters": kk, "silhouette": round(sil, 4),
+            sweep.append({"k": k, "clusters": kk,
+                          "silhouette": (round(sil, 4) if sil == sil else None),  # NaN -> None (valid JSON)
                           "rel_gap": round(self._rel_gap(heights, k, n), 4),
                           "singletons": singles})
 
@@ -654,11 +657,14 @@ class CyclosporaClusterFinder:
         rng = np.random.default_rng(seed)
         co = np.zeros((n, n)); ct = np.zeros((n, n))
         stab_sum = {k: 0.0 for k in ks}; stab_cnt = {k: 0 for k in ks}
-        mid_hi = max(3, min(k_max, n // 2))
+        m = min(n, max(2, int(n * boot_frac)))  # subsample size: >= 2 (linkage needs it), <= n
         for _ in range(n_boot):
-            idx = np.sort(rng.choice(n, int(n * boot_frac), replace=False))
+            idx = np.sort(rng.choice(n, m, replace=False))
             Zi = linkage(squareform(D[np.ix_(idx, idx)], checks=False), method=linkage_method, metric="euclidean")
-            kk = int(rng.integers(max(2, k_min), mid_hi + 1))
+            # random resolution, clamped so low < high and the cut is valid on the subsample
+            lo_k = min(max(2, k_min), max(2, m - 1))
+            hi_k = max(lo_k, min(k_max, m - 1, max(3, n // 2)))
+            kk = int(rng.integers(lo_k, hi_k + 1))
             lab = fcluster(Zi, kk, criterion="maxclust")
             same = (lab[:, None] == lab[None, :]).astype(float)
             sub = np.ix_(idx, idx)
@@ -673,11 +679,13 @@ class CyclosporaClusterFinder:
                 stab_sum[k] += float(np.mean(rc[iu] == fc[iu]))
                 stab_cnt[k] += 1
         with np.errstate(invalid="ignore", divide="ignore"):
-            frac = np.where(ct > 0, co / np.maximum(ct, 1.0), 0.0)
+            # a pair never co-sampled is UNKNOWN, not a confident split: 0.5 keeps it neutral
+            # in support (1 - 0.5) and unresolved in pair decisiveness (|2*0.5-1| = 0).
+            frac = np.where(ct > 0, co / np.maximum(ct, 1.0), 0.5)
         np.fill_diagonal(frac, 1.0)
         for row in sweep:
             k = row["k"]
-            row["stability"] = round(stab_sum[k] / stab_cnt[k], 4) if stab_cnt[k] else float("nan")
+            row["stability"] = round(stab_sum[k] / stab_cnt[k], 4) if stab_cnt[k] else None
 
         # per-merge support = 1 - mean cross-cluster co-assignment
         mem: Dict[int, List[int]] = {i: [i] for i in range(n)}
@@ -713,7 +721,7 @@ class CyclosporaClusterFinder:
 
         # selectors (all unsupervised)
         def _best(key):
-            vals = [(r["k"], r[key]) for r in sweep if r[key] == r[key]]
+            vals = [(r["k"], r[key]) for r in sweep if r.get(key) is not None]
             return max(vals, key=lambda t: t[1])[0] if vals else None
         selectors: Dict[str, Optional[int]] = {}
         knee = next((r["k"] for r in sweep if r["rel_gap"] >= self.relative_gap_floor), None)
