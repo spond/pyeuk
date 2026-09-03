@@ -28,8 +28,17 @@ Usage:
   window_haplotypes.py --bam S.bam --ref panel.fa --specimen S [--bed w.bed]
                        [--window auto|INT] [--step INT] [--min-span 50]
                        [--min-reads 10] [--min-freq 0.05] [--out calls.tsv]
+                       [--max-reads-per-window N] [--seed INT]
+
+Performance: --max-reads-per-window subsamples deep windows (deterministic, seeded) to
+cut runtime; it is OFF by default because the frequency estimate then carries sampling
+noise that can move a haplotype sitting on the --min-freq gate. The denoise fold is
+computed with a deletion-neighbourhood index instead of an all-pairs scan, which is always
+on and always produces the same calls as before.
 """
 import argparse
+import hashlib
+import heapq
 import os
 import sys
 from collections import Counter, defaultdict
@@ -107,6 +116,135 @@ def aligned_pairs(pos, cigar, seq):
     return aln
 
 
+def _hamming_le(a_toks, b_toks, max_edits):
+    """True iff two per-position token lists differ in at most `max_edits` positions.
+
+    Identical logic (including the length guard and the early exit) to the hand-rolled
+    compare the fold used to run inline, factored out so both the pairwise fallback and the
+    indexed fast path score a candidate pair exactly the same way."""
+    if len(a_toks) != len(b_toks):
+        return False
+    d = 0
+    for x, y in zip(a_toks, b_toks):
+        if x != y:
+            d += 1
+            if d > max_edits:
+                return False
+    return True
+
+
+def _denoise_pairwise(obs, order, max_edits, ratio):
+    """The original O(unique^2 x window_len) all-pairs fold, verbatim.
+
+    Kept as the correct path for max_edits > 1 (where the deletion-neighbourhood index for
+    a single substitution does not apply) and as the reference oracle the fast path is
+    checked against. Its output is the historic denoise() output."""
+    keep, merged = [], {}
+    for h in order:
+        target = None
+        for k in keep:
+            if obs[k] < obs[h] * ratio:
+                continue
+            if _hamming_le(h.split("\t"), k.split("\t"), max_edits):
+                target = k
+                break
+        if target is None:
+            keep.append(h)
+        else:
+            merged[h] = target
+    out = Counter()
+    for h, c in obs.items():
+        out[merged.get(h, h)] += c
+    return out
+
+
+# Rolling-hash constants for the deletion-neighbourhood keys (64-bit polynomial hash).
+_HASH_MASK = (1 << 64) - 1
+_HASH_BASE = 1099511628211
+
+
+def _deletion_keys(toks, tokid):
+    """SymSpell-style deletion-neighbourhood keys for a token list, for Hamming-1 lookup.
+
+    Every window string over one window has the same number of tokens, so two strings are
+    within one substitution exactly when they agree on all but one token position. Key i is
+    (i, hash(tokens before i), hash(tokens after i)); two equal-length strings share a key
+    iff they agree everywhere except that one position. Rolling prefix/suffix hashes yield
+    all len(toks) keys in O(len(toks)) instead of O(len(toks)^2), and `tokid` interns tokens
+    to small ints so equal tokens always hash the same within a window. Hashes only PROPOSE
+    candidates -- every proposed pair is confirmed by an exact _hamming_le compare at the
+    call site, so a hash collision can never change a fold decision."""
+    ids = []
+    for t in toks:
+        j = tokid.get(t)
+        if j is None:
+            j = len(tokid) + 1
+            tokid[t] = j
+        ids.append(j)
+    L = len(ids)
+    pre = [0] * (L + 1)
+    for i in range(L):
+        pre[i + 1] = (pre[i] * _HASH_BASE + ids[i]) & _HASH_MASK
+    suf = [0] * (L + 1)
+    for i in range(L - 1, -1, -1):
+        suf[i] = (suf[i + 1] * _HASH_BASE + ids[i]) & _HASH_MASK
+    return [(i, pre[i], suf[i + 1]) for i in range(L)]
+
+
+def _denoise_symspell(obs, order, max_edits, ratio):
+    """Hamming-1 fold (the default max_edits == 1) without the all-pairs scan.
+
+    Byte-identical to _denoise_pairwise for max_edits == 1: processing most-abundant first,
+    each string folds into the FIRST-kept (i.e. most abundant, earliest indexed) survivor
+    that is within one substitution AND at least `ratio` times more abundant. Only HOW that
+    survivor is found changes -- a deletion-neighbourhood index replaces the scan over every
+    survivor.
+
+    Only survivors abundant enough to ever be chosen are indexed. A fold target k must
+    satisfy obs[k] >= obs[h]*ratio, and every later string h has obs[h] >= 1, so a survivor
+    with obs[k] < ratio can never be a target for anything processed after it and is left
+    out of the index. That is what removes the quadratic: the error cloud leaves thousands
+    of singleton survivors, but none of them are indexed, so the index stays the size of the
+    handful of real peaks. Candidates are always confirmed with an exact compare, and the
+    smallest surviving index that qualifies is chosen, reproducing the original's
+    first-in-keep-order tie-break exactly."""
+    tokid = {}
+    keep = []                    # survivor strings, appended most-abundant first
+    index = defaultdict(list)    # deletion key -> ascending list of survivor indices in `keep`
+    merged = {}
+    for h in order:
+        toks = h.split("\t")
+        oh = obs[h]
+        keys = _deletion_keys(toks, tokid)
+        cand = set()
+        for key in keys:
+            bucket = index.get(key)
+            if bucket:
+                cand.update(bucket)
+        target = None
+        for idx in sorted(cand):
+            k = keep[idx]
+            if obs[k] < oh * ratio:
+                continue
+            if _hamming_le(toks, k.split("\t"), max_edits):
+                target = k
+                break
+        if target is None:
+            ki = len(keep)
+            keep.append(h)
+            # A survivor with fewer than `ratio` reads can never satisfy obs[k] >= obs[h]*ratio
+            # for any later h (obs[h] >= 1), so it is never a fold target and need not be indexed.
+            if oh >= ratio:
+                for key in keys:
+                    index[key].append(ki)
+        else:
+            merged[h] = target
+    out = Counter()
+    for h, c in obs.items():
+        out[merged.get(h, h)] += c
+    return out
+
+
 def denoise(obs, max_edits, ratio):
     """Fold rare strings into an abundant neighbour, UNOISE/DADA2-style.
 
@@ -127,36 +265,18 @@ def denoise(obs, max_edits, ratio):
     of it AND that neighbour is at least `ratio` times more abundant, which is the
     condition that distinguishes "error off a real haplotype" from "genuine minor
     variant". Folding is done most-abundant-first so chains collapse to their peak.
+
+    For the default max_edits == 1 this is computed with a deletion-neighbourhood index
+    (_denoise_symspell) so each string finds its <=1-substitution neighbours without a scan
+    over every kept string; the result is identical to the historic all-pairs fold, which is
+    retained (_denoise_pairwise) for max_edits > 1 and as the validation oracle.
     """
     if max_edits <= 0 or len(obs) < 2:
         return obs
     order = [h for h, _ in obs.most_common()]
-    keep, merged = [], {}
-    for h in order:
-        target = None
-        for k in keep:
-            if obs[k] < obs[h] * ratio:
-                continue
-            a, b = h.split("\t"), k.split("\t")
-            if len(a) != len(b):
-                continue
-            d = 0
-            for x, y in zip(a, b):
-                if x != y:
-                    d += 1
-                    if d > max_edits:
-                        break
-            if d <= max_edits:
-                target = k
-                break
-        if target is None:
-            keep.append(h)
-        else:
-            merged[h] = target
-    out = Counter()
-    for h, c in obs.items():
-        out[merged.get(h, h)] += c
-    return out
+    if max_edits == 1:
+        return _denoise_symspell(obs, order, max_edits, ratio)
+    return _denoise_pairwise(obs, order, max_edits, ratio)
 
 
 def left_normalize(obs, ref):
@@ -238,6 +358,18 @@ def name_haplotype(obs, ref, first_pos=1):
     return ",".join(diffs) if diffs else "="
 
 
+def _sample_key(seed, qname):
+    """A deterministic, uniform sort key for one read's name, used to subsample a window.
+
+    Selecting the reads with the smallest key is a bottom-k sample: uniform because the hash
+    is uniform, and order-independent because it depends only on the read name and the seed,
+    not on the order reads come off the BAM. Same seed + same reads therefore always yield
+    the same sample, and a different seed yields an independent one -- which is what lets the
+    correctness check confirm above-gate calls are stable across seeds. A cryptographic
+    digest (not Python's salted hash()) keeps the sample reproducible across processes."""
+    return hashlib.blake2b(f"{seed}\t{qname}".encode(), digest_size=16).digest()
+
+
 def block_lengths(bam):
     with _require_pysam().AlignmentFile(bam, "rb") as fh:
         return sorted(r.reference_length or 0 for r in fh.fetch()
@@ -293,6 +425,23 @@ def main(argv=None):
                         "positions; 0 disables denoising")
     p.add_argument("--denoise-ratio", type=float, default=8.0,
                    help="the neighbour must be at least this many times more abundant")
+    p.add_argument("--max-reads-per-window", type=int, default=0,
+                   help="cap the spanning reads used per window by subsampling deep windows "
+                        "to this many, deterministically and seeded (0 or negative, the "
+                        "default, disables the cap and uses every read). Every quantity "
+                        "emitted is a count or a frequency, so a few thousand reads estimate a "
+                        "haplotype's frequency about as well as tens of thousands do, and a "
+                        "cap of a few thousand cuts runtime ~7-10x. It is OFF by default "
+                        "because the estimate carries binomial sampling noise: a haplotype "
+                        "sitting within a couple of standard errors of --min-freq can cross "
+                        "the gate under one seed and not another (measured on real Cyclospora "
+                        "data, genuine haplotypes at ~5.5%% flip in and out at a 5000 cap with "
+                        "a 5%% gate). Turn it on when speed matters and the gate margin is "
+                        "comfortable -- e.g. raise --min-freq, or keep the cap well above "
+                        "1/min-freq * (a few hundred) so boundary calls are stable.")
+    p.add_argument("--seed", type=int, default=0,
+                   help="seed for the per-window subsample (see --max-reads-per-window); "
+                        "changing it draws an independent sample of the same size")
     p.add_argument("--out", default="-")
     a = p.parse_args(argv)
 
@@ -344,6 +493,7 @@ def main(argv=None):
     # every window, not an error: the sheet builder needs a row saying "this specimen was
     # examined and nothing was called", and the cohort must not be held hostage to one
     # dud sample.
+    cap = a.max_reads_per_window
     rows = []
     for contig, wins in by_contig.items():
         if contig not in ref:
@@ -361,27 +511,58 @@ def main(argv=None):
             for (s, e) in wins:
                 obs = Counter()
                 refstr = ref[contig][s - 1:e]
-                for r in fh.fetch(contig, s - 1, e):
-                    # Secondary and supplementary alignments are the SAME molecule
-                    # placed again. Counting them as separate spanning reads votes one
-                    # molecule twice, inflates the depth a gate is judged against, and
-                    # can promote a chimeric split alignment into its own haplotype.
-                    if (r.is_unmapped or r.is_secondary or r.is_supplementary
-                            or not r.cigarstring or not r.query_sequence):
-                        continue
-                    # reject non-spanning reads before building the dict at all
-                    if r.reference_start + 1 > s or (r.reference_end or 0) < e:
-                        continue
-                    aln = aligned_pairs(r.reference_start + 1, r.cigarstring,
-                                        r.query_sequence)
-                    if all(pp in aln for pp in range(s, e + 1)):
-                        parts = [aln[pp] for pp in range(s, e + 1)]
-                        # normalise BEFORE counting: two reads whose indel the aligner placed
-                        # differently are the same molecule and must land in the same bin.
-                        # Normalising after counting only renames survivors and merges nothing.
-                        if a.normalize == "left":
-                            parts = left_normalize(parts, refstr)
-                        obs["\t".join(parts)] += 1
+                # Subsample deep windows before the per-read reconstruction (opt-in; OFF by
+                # default -- see --max-reads-per-window). The window's spanning reads are
+                # collected as lightweight (key, fields) tuples, then the `cap` reads with the
+                # smallest sample key are kept (a deterministic, seeded bottom-k). aligned_pairs
+                # -- the per-read, per-base hot path -- then runs only on the kept reads, so its
+                # cost falls with the cap rather than with raw depth. The kept reads estimate
+                # each haplotype's frequency; the estimate is unbiased but carries binomial
+                # noise, so a haplotype within a couple of standard errors of --min-freq can
+                # cross the gate under one seed and not another. That is why the cap is off by
+                # default: with it off this branch is skipped and the result is exactly the
+                # full-depth call.
+                if cap > 0:
+                    spanning = []
+                    for r in fh.fetch(contig, s - 1, e):
+                        if (r.is_unmapped or r.is_secondary or r.is_supplementary
+                                or not r.cigarstring or not r.query_sequence):
+                            continue
+                        if r.reference_start + 1 > s or (r.reference_end or 0) < e:
+                            continue
+                        spanning.append((_sample_key(a.seed, r.query_name), r.query_name,
+                                         r.reference_start, r.cigarstring, r.query_sequence))
+                    if len(spanning) > cap:
+                        spanning = heapq.nsmallest(cap, spanning)
+                    for (_key, _qn, rstart, cig, seq) in spanning:
+                        aln = aligned_pairs(rstart + 1, cig, seq)
+                        if all(pp in aln for pp in range(s, e + 1)):
+                            parts = [aln[pp] for pp in range(s, e + 1)]
+                            if a.normalize == "left":
+                                parts = left_normalize(parts, refstr)
+                            obs["\t".join(parts)] += 1
+                else:
+                    for r in fh.fetch(contig, s - 1, e):
+                        # Secondary and supplementary alignments are the SAME molecule
+                        # placed again. Counting them as separate spanning reads votes one
+                        # molecule twice, inflates the depth a gate is judged against, and
+                        # can promote a chimeric split alignment into its own haplotype.
+                        if (r.is_unmapped or r.is_secondary or r.is_supplementary
+                                or not r.cigarstring or not r.query_sequence):
+                            continue
+                        # reject non-spanning reads before building the dict at all
+                        if r.reference_start + 1 > s or (r.reference_end or 0) < e:
+                            continue
+                        aln = aligned_pairs(r.reference_start + 1, r.cigarstring,
+                                            r.query_sequence)
+                        if all(pp in aln for pp in range(s, e + 1)):
+                            parts = [aln[pp] for pp in range(s, e + 1)]
+                            # normalise BEFORE counting: two reads whose indel the aligner placed
+                            # differently are the same molecule and must land in the same bin.
+                            # Normalising after counting only renames survivors and merges nothing.
+                            if a.normalize == "left":
+                                parts = left_normalize(parts, refstr)
+                            obs["\t".join(parts)] += 1
                 obs = denoise(obs, a.denoise_edits, a.denoise_ratio)
                 n = sum(obs.values())
                 wname = f"{contig}_W{s:04d}"
