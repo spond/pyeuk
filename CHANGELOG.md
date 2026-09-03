@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+* **Graphical Report Generation (`pyeuk report`)**:
+  - New `pyeuk.report` module rendering the `cluster_sweep()` result (dict or `*_SWEEP.json`) into a single self-contained HTML report via `render(sweep, dist_df=None, flavor="dashboard", theme="studio")`. No JavaScript: charts are inline SVG and the optional distance heatmap is an embedded PNG.
+  - Three **flavors**: `dashboard` (default), `clinical`, and `narrative`. Confident cohorts are reported as a single green number, fuzzy cohorts as an amber range, and stable cores are drawn directly on the confidence tree as numbered bars.
+  - Two **themes**: `studio` (Fraunces/Inter via Google Fonts) and `galaxy` (Galaxy system fonts + brand palette with **zero external assets**, for embedding inside Galaxy).
+  - Portable output: `<meta charset="utf-8">` plus HTML entities so the document contains **zero raw non-ASCII bytes** and renders correctly under any server/charset.
+  - New `pyeuk report SWEEP.json -o report.html [--flavor] [--theme] [--matrix]` CLI subcommand, and a `--report` flag on `pyeuk cluster` (with `--report-flavor` / `--report-theme`) to emit the HTML alongside the `SWEEP.json` in one step.
+  - Distance heatmap uses the new optional `pyeuk[report]` extra (`pillow>=9`); if Pillow is absent the heatmap is skipped gracefully with a note instead of crashing.
+
+---
+
 ## [0.6.0] - 2026-08-27
 
 ### Changed

@@ -141,7 +141,41 @@ pyeuk eukaryotyping -i haplotype_sheet.txt -o distance_matrix.csv --wibs
 
 # Step 3: Run prospective outbreak clustering
 pyeuk cluster -m distance_matrix.csv -o clusters_detected
+
+# Step 4 (optional): render a graphical HTML report from the sweep
+pyeuk report clusters_detected/*_SWEEP.json -o report.html --matrix distance_matrix.csv
 ```
+
+---
+
+## 📈 Graphical Reports (`pyeuk report`)
+
+The `cluster` sweep writes a machine-readable `*_SWEEP.json` (count range, confidence, per-branch confidence tree, stable cores, and the k-sweep table). `pyeuk report` turns that JSON into a **single self-contained HTML file** — no JavaScript, charts as inline SVG, and the optional distance heatmap embedded as a PNG.
+
+```bash
+# Render a report from an existing sweep (dashboard flavor, studio theme)
+pyeuk report clusters_detected/2026-08-26_SWEEP.json -o report.html \
+    --matrix distance_matrix.csv
+
+# Or emit the report in the same step as the sweep
+pyeuk cluster -m distance_matrix.csv -o clusters_detected --report
+```
+
+**Flavors** (`--flavor`): `dashboard` (default — at-a-glance tiles + confidence tree + count sweep + distance heatmap), `clinical` (single-page verdict report), and `narrative` (a prose walkthrough of what the data supports). A **confident** cohort is reported as a single green number; a **fuzzy** cohort as an amber range. Stable cores are drawn directly on the tree as numbered bars.
+
+**Themes** (`--theme`):
+* `studio` (default) — Fraunces/Inter via a Google Fonts link; best for standalone viewing.
+* `galaxy` — Galaxy's system-font stack and brand palette with **zero external assets** (no CDN, no web fonts), for embedding inside Galaxy.
+
+The heatmap needs the optional [Pillow](https://python-pillow.org/) dependency:
+
+```bash
+pip install 'pyeuk[report]'
+```
+
+If Pillow is absent, the report still renders — the heatmap panel is replaced with a short note rather than failing.
+
+> **Embedding in Galaxy.** Galaxy sanitizes tool-generated HTML by default, so an `html` dataset renders as raw markup unless its producing tool is on the `sanitize_all_html` allowlist (configured via `sanitize_allowlist_file` in `galaxy.yml`). The report is deliberately built to be safe to allowlist: use `--theme galaxy` so it is **self-contained, JavaScript-free, and references no external assets**, then add the report-producing tool's `tool_id` to `sanitize_allowlist_file` so Galaxy serves the HTML as-is.
 
 ---
 
