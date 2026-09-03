@@ -7,11 +7,12 @@ and gold-standard supervised calibration.
 
 import os
 import datetime
+from collections import Counter
 import numpy as np
 import pandas as pd
 from scipy.spatial.distance import squareform
-from scipy.cluster.hierarchy import linkage, cut_tree, fcluster
-from sklearn.metrics import roc_auc_score
+from scipy.cluster.hierarchy import linkage, cut_tree, fcluster, leaves_list
+from sklearn.metrics import roc_auc_score, silhouette_score
 from typing import Tuple, Optional, Dict, List
 
 
@@ -533,6 +534,337 @@ class CyclosporaClusterFinder:
         cluster_df.to_csv(output_path, sep="\t", index=False)
         print(f"[ClusterFinder] Saved outbreak cluster assignments to: {output_path}")
         return cluster_df
+
+
+    # ==================================================================================
+    # SWEEP DIAGNOSTIC -- the default clustering answer.
+    #
+    # A single k is only trustworthy when the data actually determines it. Rather than
+    # commit to one cut, cluster_sweep reports how many groups the cohort supports as a
+    # RANGE, how confident that is, and a per-branch confidence tree. Four independent,
+    # unsupervised count selectors (merge-gap knee, silhouette, bootstrap stability, and
+    # the Tibshirani gap statistic) vote; when they agree a single number is reported,
+    # when they scatter a range is, with the confident sub-structure (stable cores and
+    # well-supported splits) reported underneath either way. Nothing here uses ground
+    # truth. Branch support = 1 - mean cross-cluster co-assignment over bootstrap
+    # resamples, marginalised across resolution -- high support = a split the data
+    # reproduces, low = one it does not (drawn faded/dashed in the confidence tree).
+    # ==================================================================================
+
+    @staticmethod
+    def _rel_gap(heights: np.ndarray, k: int, n: int) -> float:
+        """Relative merge-height gap crossing from k to k+1 clusters (what the knee reads)."""
+        if k < 1 or k >= n:
+            return 0.0
+        hi = heights[n - 1 - k]
+        lo = heights[n - 2 - k] if n - 2 - k >= 0 else 0.0
+        return float((hi - lo) / hi) if hi > 0 else 0.0
+
+    @staticmethod
+    def _to_newick(Z: np.ndarray, labels: List[str], support: List[float]) -> str:
+        """Newick string with per-internal-node support (phylogenetics convention)."""
+        n = len(labels)
+        import sys as _sys
+        _sys.setrecursionlimit(max(10000, n * 4))
+
+        def rec(node: int) -> str:
+            if node < n:
+                return (str(labels[node]).replace("(", "_").replace(")", "_").replace(",", "_")
+                        .replace(":", "_").replace(";", "_").replace(" ", "_"))
+            a, b = int(Z[node - n, 0]), int(Z[node - n, 1])
+            s = support[node - n]
+            return f"({rec(a)},{rec(b)}){s:.3f}"
+
+        return rec(2 * n - 2) + ";"
+
+    @staticmethod
+    def _count_confident(Z: np.ndarray, support: List[float], n: int, tau: float) -> int:
+        """Number of clusters when only splits with support >= tau are trusted.
+
+        Walk down from the root: at a split whose support clears tau the two sides are
+        distinct clusters (recurse); at a split below tau the whole subtree collapses to one
+        cluster, because the data does not reproduce that division. Sweeping tau turns the
+        confidence tree into a range of defensible cluster counts.
+        """
+        # iterative walk (no recursion limit / C-stack risk on deep trees): a leaf, or a
+        # subtree whose top split is below tau, contributes exactly one cluster; a confident
+        # split pushes both children to be counted separately.
+        count = 0
+        stack = [2 * n - 2]
+        while stack:
+            node = stack.pop()
+            if node < n or support[node - n] < tau:
+                count += 1
+            else:
+                stack.append(int(Z[node - n, 0]))
+                stack.append(int(Z[node - n, 1]))
+        return count
+
+    def cluster_sweep(
+        self,
+        dist_df: pd.DataFrame,
+        k_min: int = 2,
+        k_max: int = 50,
+        n_boot: int = 200,
+        boot_frac: float = 0.85,
+        seed: int = 0,
+        core_frac: float = 0.90,
+        support_solid: float = 0.75,
+        support_mid: float = 0.45,
+        do_gap: bool = True,
+        linkage_method: str = "ward",
+        output_dir: Optional[str] = None,
+    ) -> Dict[str, any]:
+        """Run the cluster-count sweep diagnostic on a distance matrix.
+
+        Returns a dict with: the count RANGE and (when the selectors agree) a point
+        estimate, a per-k sweep table (silhouette / relative gap / stability / gap
+        statistic), the four selector votes, the stable cores, and the confidence tree
+        (leaf order, per-node support, and a Newick string). Writes a JSON report and a
+        Newick tree to output_dir when given. Unsupervised throughout.
+        """
+        samples = list(dist_df.index)
+        n = len(samples)
+        result: Dict[str, any] = {"n": n, "linkage_method": linkage_method}
+        if n < 3:
+            result.update({"count_range": [1, max(1, n)], "point_estimate": max(1, n),
+                           "confident": True, "note": "cohort too small to sweep"})
+            return result
+
+        D = dist_df.values.astype(float).copy()
+        D = (D + D.T) / 2.0
+        np.fill_diagonal(D, 0.0)
+        Z = linkage(squareform(D, checks=False), method=linkage_method, metric="euclidean")
+        heights = Z[:, 2]
+
+        ks = list(range(max(2, k_min), min(k_max, n - 1) + 1))
+        full_lab = {k: fcluster(Z, k, criterion="maxclust") for k in ks}
+
+        # per-k unsupervised scores
+        sweep = []
+        for k in ks:
+            lab = full_lab[k]
+            kk = len(set(lab))
+            sil = float(silhouette_score(D, lab, metric="precomputed")) if 2 <= kk < n else float("nan")
+            singles = int(sum(1 for c in set(lab) if list(lab).count(c) == 1))
+            sweep.append({"k": k, "clusters": kk,
+                          "silhouette": (round(sil, 4) if sil == sil else None),  # NaN -> None (valid JSON)
+                          "rel_gap": round(self._rel_gap(heights, k, n), 4),
+                          "singletons": singles})
+
+        # bootstrap: marginalised co-assignment (for support / cores / pair resolution)
+        # and per-k stability (agreement of resample co-membership with the full tree).
+        rng = np.random.default_rng(seed)
+        co = np.zeros((n, n)); ct = np.zeros((n, n))
+        stab_sum = {k: 0.0 for k in ks}; stab_cnt = {k: 0 for k in ks}
+        m = min(n, max(2, int(n * boot_frac)))  # subsample size: >= 2 (linkage needs it), <= n
+        for _ in range(n_boot):
+            idx = np.sort(rng.choice(n, m, replace=False))
+            Zi = linkage(squareform(D[np.ix_(idx, idx)], checks=False), method=linkage_method, metric="euclidean")
+            # random resolution, clamped so low < high and the cut is valid on the subsample
+            lo_k = min(max(2, k_min), max(2, m - 1))
+            hi_k = max(lo_k, min(k_max, m - 1, max(3, n // 2)))
+            kk = int(rng.integers(lo_k, hi_k + 1))
+            lab = fcluster(Zi, kk, criterion="maxclust")
+            same = (lab[:, None] == lab[None, :]).astype(float)
+            sub = np.ix_(idx, idx)
+            co[sub] += same
+            ct[sub] += 1.0
+            iu = np.triu_indices(len(idx), 1)
+            for k in ks:
+                lk = fcluster(Zi, k, criterion="maxclust")
+                rc = (lk[:, None] == lk[None, :])
+                fl = full_lab[k][idx]
+                fc = (fl[:, None] == fl[None, :])
+                stab_sum[k] += float(np.mean(rc[iu] == fc[iu]))
+                stab_cnt[k] += 1
+        with np.errstate(invalid="ignore", divide="ignore"):
+            # a pair never co-sampled is UNKNOWN, not a confident split: 0.5 keeps it neutral
+            # in support (1 - 0.5) and unresolved in pair decisiveness (|2*0.5-1| = 0).
+            frac = np.where(ct > 0, co / np.maximum(ct, 1.0), 0.5)
+        np.fill_diagonal(frac, 1.0)
+        for row in sweep:
+            k = row["k"]
+            row["stability"] = round(stab_sum[k] / stab_cnt[k], 4) if stab_cnt[k] else None
+
+        # per-merge support = 1 - mean cross-cluster co-assignment
+        mem: Dict[int, List[int]] = {i: [i] for i in range(n)}
+        support: List[float] = []
+        for i, (a, b, h, _) in enumerate(Z):
+            a, b = int(a), int(b)
+            mem[n + i] = mem[a] + mem[b]
+            cross = frac[np.ix_(mem[a], mem[b])]
+            support.append(round(float(1.0 - cross.mean()), 4))
+        strong_splits = int(sum(1 for s in support if s >= 0.75))
+
+        # stable cores: connected components at co-assignment >= core_frac
+        adj = frac >= core_frac
+        seen = [False] * n; cores = []
+        for i in range(n):
+            if seen[i]:
+                continue
+            stack = [i]; comp = []
+            seen[i] = True
+            while stack:
+                u = stack.pop(); comp.append(u)
+                for v in range(n):
+                    if adj[u, v] and not seen[v]:
+                        seen[v] = True; stack.append(v)
+            cores.append([samples[j] for j in comp])
+        nonsingleton_cores = [c for c in cores if len(c) > 1]
+
+        # pairwise resolution: how decisively pairs are same/different (0.5 = a coin flip)
+        iu = np.triu_indices(n, 1)
+        decisive = np.abs(2.0 * frac[iu] - 1.0)
+        pairs_resolved = float(np.mean(decisive >= 0.5))
+        mean_decisiveness = float(np.mean(decisive))
+
+        # selectors (all unsupervised)
+        def _best(key):
+            vals = [(r["k"], r[key]) for r in sweep if r.get(key) is not None]
+            return max(vals, key=lambda t: t[1])[0] if vals else None
+        selectors: Dict[str, Optional[int]] = {}
+        knee = next((r["k"] for r in sweep if r["rel_gap"] >= self.relative_gap_floor), None)
+        selectors["knee"] = knee
+        selectors["silhouette"] = _best("silhouette")
+        selectors["stability"] = _best("stability")
+        if do_gap:
+            try:
+                selectors["gap"] = self._gap_statistic(D, Z, ks, rng, linkage_method)
+            except Exception as exc:  # MDS is optional; never let it sink the sweep
+                print(f"[ClusterFinder] gap statistic skipped: {exc}")
+        # CONFIDENCE -- do the independent count selectors agree? The merge-gap knee,
+        # silhouette, and gap statistic are three unsupervised estimates of k. When they
+        # concur the count is determined and a single number is reported; when they scatter
+        # it is not. (Bootstrap stability is kept in the sweep table but excluded from the
+        # vote: it saturates high on diffuse data and would drag every cohort toward "fuzzy".)
+        vote_keys = ("knee", "silhouette", "gap")
+        votes = [selectors[k] for k in vote_keys if selectors.get(k)]
+        if votes:
+            mode_k = Counter(votes).most_common(1)[0][0]
+            n_near = sum(1 for v in votes if abs(v - mode_k) <= 1)
+            spread = max(votes) - min(votes)
+            confident = (n_near >= max(2, (len(votes) + 1) // 2)) and (spread <= max(2, 0.30 * mode_k))
+        else:
+            mode_k = None; confident = False; spread = 0
+
+        # RANGE -- when the count is not determined, read it off the confidence tree itself:
+        # cut the tree keeping only splits at or above a support threshold, at the same two
+        # tiers the tree is drawn. solid (>= support_solid) gives the groups the data
+        # reproduces fully; solid+moderate (>= support_mid) gives the finest partition still
+        # supported. (The raw selector span is uninformative -- silhouette and gap drift
+        # toward fine partitions on diffuse surveillance data.)
+        k_solid = self._count_confident(Z, support, n, support_solid)
+        k_mid = self._count_confident(Z, support, n, support_mid)
+        if confident:
+            lo = hi = int(mode_k); point = int(mode_k)
+        else:
+            lo, hi = min(k_solid, k_mid), max(k_solid, k_mid); point = None
+
+        result.update({
+            "count_range": [int(lo), int(hi)],
+            "point_estimate": point,
+            "confident": bool(confident),
+            "count_at_solid_support": int(k_solid),
+            "count_at_moderate_support": int(k_mid),
+            "support_tiers": {"solid": support_solid, "moderate": support_mid},
+            "naive_selectors": selectors,
+            "naive_selector_spread": int(spread),
+            "pairs_resolved": round(pairs_resolved, 4),
+            "mean_decisiveness": round(mean_decisiveness, 4),
+            "strong_splits": strong_splits,
+            "n_stable_cores": len(nonsingleton_cores),
+            "stable_cores": nonsingleton_cores,
+            "sweep": sweep,
+            "tree": self._tree_render(Z, samples, support),
+        })
+        result["tree"]["newick"] = self._to_newick(Z, samples, support)
+        result["headline"] = (
+            f"{point} clusters (confident: count selectors agree)"
+            if confident else
+            f"{lo}-{hi} clusters (count not determined; selectors scatter "
+            f"{min(votes) if votes else '?'}-{max(votes) if votes else '?'}): solid splits give "
+            f"{k_solid}, adding moderate splits gives {k_mid}; {len(nonsingleton_cores)} stable "
+            f"cores, {int(round(pairs_resolved * 100))}% of specimen pairs resolved"
+        )
+
+        # representative partition, for downstream tools that need one flat assignment:
+        # the confident count when there is one, else the finest supported (moderate) tier.
+        rep_k = point if point else max(2, k_mid)
+        rep_lab = fcluster(Z, rep_k, criterion="maxclust")
+        rep_df = pd.DataFrame({"Seq_ID": samples, "Assigned_cluster": rep_lab})
+        result["representative_k"] = int(rep_k)
+
+        if output_dir:
+            import json as _json
+            os.makedirs(output_dir, exist_ok=True)
+            today = datetime.date.today().strftime("%Y-%m-%d")
+            jpath = os.path.join(output_dir, f"{today}_SWEEP.json")
+            npath = os.path.join(output_dir, f"{today}_confidence_tree.nwk")
+            with open(jpath, "w") as fh:
+                _json.dump(result, fh, indent=1)
+            with open(npath, "w") as fh:
+                fh.write(result["tree"]["newick"] + "\n")
+            self._write_clusters(rep_df, output_dir, rep_k, None, samples)
+            print(f"[ClusterFinder] Sweep: {result['headline']}")
+            print(f"[ClusterFinder] Wrote {jpath}, {npath}, and a representative partition "
+                  f"(k={rep_k}, {'confident' if point else 'moderate tier'}).")
+        self.last_selection_meta = {"status": "sweep", "count_range": [int(lo), int(hi)],
+                                    "confident": bool(confident), "point_estimate": point}
+        return result
+
+    @staticmethod
+    def _tree_render(Z: np.ndarray, samples: List[str], support: List[float]) -> Dict[str, any]:
+        """Leaf order + per-node geometry (child positions/heights) and support, so a
+        renderer can draw the confidence tree without re-deriving the linkage."""
+        n = len(samples)
+        order = list(leaves_list(Z))
+        ypos = {leaf: i for i, leaf in enumerate(order)}
+        nx: Dict[int, float] = {}
+        nodes = []
+        for i, (a, b, h, _) in enumerate(Z):
+            a, b = int(a), int(b)
+            ya = ypos[a] if a < n else nx[a]
+            yb = ypos[b] if b < n else nx[b]
+            hca = Z[a - n][2] if a >= n else 0.0
+            hcb = Z[b - n][2] if b >= n else 0.0
+            nx[n + i] = (ya + yb) / 2.0
+            nodes.append({"ya": float(ya), "yb": float(yb), "h": float(h),
+                          "hca": float(hca), "hcb": float(hcb), "support": support[i]})
+        return {"leaf_order": [samples[i] for i in order],
+                "hmax": float(Z[:, 2].max()), "nodes": nodes}
+
+    @staticmethod
+    def _gap_statistic(D: np.ndarray, Z: np.ndarray, ks: List[int], rng, linkage_method: str) -> int:
+        """Tibshirani gap statistic over an MDS embedding; returns argmax-gap k. Unsupervised."""
+        import warnings
+        from sklearn.manifold import MDS
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")  # sklearn churns MDS's init/dissimilarity kwargs
+            X = MDS(n_components=min(10, D.shape[0] - 1), dissimilarity="precomputed",
+                    random_state=0, normalized_stress="auto").fit_transform(D)
+        lo, hi = X.min(0), X.max(0)
+
+        def Wk(lab, Xe):
+            s = 0.0
+            for c in set(lab):
+                pts = Xe[lab == c]
+                if len(pts) > 1:
+                    s += ((pts[:, None, :] - pts[None, :, :]) ** 2).sum() / (2 * len(pts))
+            return s
+
+        B = 20
+        lref = np.zeros((B, len(ks)))
+        for bnum in range(B):
+            Xr = rng.uniform(lo, hi, X.shape)
+            Zr = linkage(Xr, method=linkage_method)
+            for j, k in enumerate(ks):
+                lref[bnum, j] = np.log(Wk(fcluster(Zr, k, "maxclust"), Xr) + 1e-9)
+        gaps = {}
+        for j, k in enumerate(ks):
+            lw = np.log(Wk(fcluster(Z, k, "maxclust"), X) + 1e-9)
+            gaps[k] = float(lref[:, j].mean() - lw)
+        return max(gaps, key=gaps.get)
 
     def detect_micro_clusters(
         self,
