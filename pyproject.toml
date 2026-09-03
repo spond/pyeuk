@@ -31,6 +31,9 @@ dependencies = [
 amplicon = [
     "pysam>=0.22",
 ]
+report = [
+    "pillow>=9",
+]
 
 [project.urls]
 Homepage = "https://github.com/spond/pyeuk"

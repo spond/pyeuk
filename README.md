@@ -26,10 +26,11 @@ It replaces legacy, brittle heuristics with a fast, mathematically rigorous dist
 * **Gram Matrix PSD Projection**: Guarantees positive semi-definite Euclidean metric geometry (`λ_min >= 0.0`) for valid, mathematically sound Ward hierarchical clustering.
 * **Vectorized Acceleration**: Accelerated via vectorized NumPy and Numba JIT kernels (**99.2× faster** than legacy R scripts, processing 1,000+ specimens in seconds).
 
-### 3. Automated Label-Free Outbreak Clustering
-* **Unsupervised Knee Detection**: Automatically determines the optimal number of outbreak clusters (`k`) via scale-free relative merge-height gap analysis (`rel_gap >= 0.2200`), eliminating the need for labeled training data or manual cutoffs.
-* **100% Deterministic Tree Cuts**: Uses lexicographical tie-breaking to eliminate non-deterministic clustering artifacts across runs.
-* **Outlier & Noise Guards**: Incorporates cohort size guards to prevent false cluster splitting on background surveillance samples.
+### 3. Label-Free Clustering with a Sweep Diagnostic
+* **Reports a range, not a forced number**: `cluster` runs a bootstrap **sweep** by default. It reports the *range* of cluster counts the data supports, **whether that count is determined** (do the independent count selectors agree?), a per-branch **confidence tree** (solid = a split the data reproduces, faded/dashed = uncertain), and the **stable cores** (specimen groups reproduced across resamples). A single number is emitted only when the selectors concur; otherwise a range — so the tool never invents a cutoff the data does not support.
+* **Deterministic & unsupervised**: no labels and no training; deterministic for a fixed seed via lexicographical tie-breaking.
+* **Legacy single-k still available**: `--single-k` restores the classic single-partition cut (merge-height-gap knee, `rel_gap >= 0.2200`, with cohort-size guards) for downstream steps that need one flat assignment.
+* **Graphical report**: `--report` (or `pyeuk report`) turns the sweep into a self-contained HTML dashboard — see below.
 
 ---
 
@@ -141,7 +142,41 @@ pyeuk eukaryotyping -i haplotype_sheet.txt -o distance_matrix.csv --wibs
 
 # Step 3: Run prospective outbreak clustering
 pyeuk cluster -m distance_matrix.csv -o clusters_detected
+
+# Step 4 (optional): render a graphical HTML report from the sweep
+pyeuk report clusters_detected/*_SWEEP.json -o report.html --matrix distance_matrix.csv
 ```
+
+---
+
+## 📈 Graphical Reports (`pyeuk report`)
+
+The `cluster` sweep writes a machine-readable `*_SWEEP.json` (count range, confidence, per-branch confidence tree, stable cores, and the k-sweep table). `pyeuk report` turns that JSON into a **single self-contained HTML file** — no JavaScript, charts as inline SVG, and the optional distance heatmap embedded as a PNG.
+
+```bash
+# Render a report from an existing sweep (dashboard flavor, studio theme)
+pyeuk report clusters_detected/2026-08-26_SWEEP.json -o report.html \
+    --matrix distance_matrix.csv
+
+# Or emit the report in the same step as the sweep
+pyeuk cluster -m distance_matrix.csv -o clusters_detected --report
+```
+
+**Flavors** (`--flavor`): `dashboard` (default — at-a-glance tiles + confidence tree + count sweep + distance heatmap), `clinical` (single-page verdict report), and `narrative` (a prose walkthrough of what the data supports). A **confident** cohort is reported as a single green number; a **fuzzy** cohort as an amber range. Stable cores are drawn directly on the tree as numbered bars.
+
+**Themes** (`--theme`):
+* `studio` (default) — Fraunces/Inter via a Google Fonts link; best for standalone viewing.
+* `galaxy` — Galaxy's system-font stack and brand palette with **zero external assets** (no CDN, no web fonts), for embedding inside Galaxy.
+
+The heatmap needs the optional [Pillow](https://python-pillow.org/) dependency:
+
+```bash
+pip install 'pyeuk[report]'
+```
+
+If Pillow is absent, the report still renders — the heatmap panel is replaced with a short note rather than failing.
+
+> **Embedding in Galaxy.** Galaxy sanitizes tool-generated HTML by default, so an `html` dataset renders as raw markup unless its producing tool is on the `sanitize_all_html` allowlist (configured via `sanitize_allowlist_file` in `galaxy.yml`). The report is deliberately built to be safe to allowlist: use `--theme galaxy` so it is **self-contained, JavaScript-free, and references no external assets**, then add the report-producing tool's `tool_id` to `sanitize_allowlist_file` so Galaxy serves the HTML as-is.
 
 ---
 
@@ -189,6 +224,7 @@ print(f"Detected {k} outbreak clusters across {len(clusters_df)} specimens.")
 * **Presence/Absence Indicator Weighting**: PyEuk defaults to Heterozygosity weighting ($w = 2p(1-p)$) for binary indicator sheets, concentrating weight on balanced, outbreak-discriminating columns while gracefully attenuating rare singletons. Also supports Inverted KING ($w = \sqrt{p(1-p)}$), Legacy Dosage KING ($w = 1/\sqrt{p(1-p)}$), and Uniform weighting ($w = 1.0$), with optional MAF filtering (`--min-maf`).
 * **Benchmarking Non-Triviality (Synthetic Panels)**: On the synthetic *Cryptosporidium* panel, all single-locus ARIs are < 0.47 (18S: 0.465, HSP70: 0.213, COWP: 0.335, gp60: 0.357). Under complete linkage, unweighted plain Hamming drops to **ARI = 0.6503**, while PyEuk wIBS achieves **ARI = 1.0000**, proving that multi-locus frequency weighting recovers structure inaccessible to unweighted presence/absence matrices.
 * **Speedup**: Distance matrix computation on N = 1,078 national surveillance specimens drops from **24.6 minutes to 14.9 seconds** (99.2× faster).
+* **Amplicon front-end speedup**: `define-windows` is single-pass and process-parallel (**≈10×** on deep panels — a 66-BAM *Cyclospora* cohort drops from ~2.4 h to ~14 min, byte-identical output); `call-haplotypes` replaces the O(unique²) denoise fold with a deletion-neighbourhood (SymSpell) index (**lossless**, removing the high-diversity long tail), with optional per-window read subsampling (`--max-reads-per-window`).
 * **Metric Validity**: Gram matrix PSD projection guarantees `λ_min >= 0.0` across both wIBS and Ensemble distance matrices, eliminating distorted hierarchical tree geometries, with raw pairwise distance export supported via `--no-psd`.
 
 ---

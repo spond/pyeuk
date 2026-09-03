@@ -145,6 +145,37 @@ def main():
     cluster_parser.add_argument(
         "--n-boot", type=int, default=200,
         help="Bootstrap resamples for branch support and stability in the sweep (default: 200).")
+    cluster_parser.add_argument(
+        "--report", action="store_true", default=False,
+        help="Also render a self-contained graphical HTML report alongside the SWEEP.json "
+             "(written to <output-dir>/<date>_REPORT.html). Only meaningful for the sweep "
+             "diagnostic, not --single-k. The distance matrix is reused for the heatmap.")
+    cluster_parser.add_argument(
+        "--report-flavor", choices=["dashboard", "clinical", "narrative"], default="dashboard",
+        help="Layout for --report (default: dashboard).")
+    cluster_parser.add_argument(
+        "--report-theme", choices=["studio", "galaxy"], default="studio",
+        help="Theme for --report. 'studio' links Google Fonts; 'galaxy' uses system fonts and "
+             "the Galaxy palette with no external assets, for embedding inside Galaxy (default: studio).")
+
+    # Command: report -- render an HTML report from an existing SWEEP.json
+    report_parser = subparsers.add_parser(
+        "report",
+        help="Render a self-contained graphical HTML report from a cluster SWEEP.json")
+    report_parser.add_argument("sweep_json", help="Path to a *_SWEEP.json written by `pyeuk cluster`")
+    report_parser.add_argument("-o", "--output", required=True, help="Output HTML path")
+    report_parser.add_argument(
+        "--flavor", choices=["dashboard", "clinical", "narrative"], default="dashboard",
+        help="Report layout: 'dashboard' (default, at-a-glance tiles + tree + sweep + heatmap), "
+             "'clinical' (single-page verdict report), or 'narrative' (prose walkthrough).")
+    report_parser.add_argument(
+        "--theme", choices=["studio", "galaxy"], default="studio",
+        help="'studio' (Fraunces/Inter via Google Fonts, for standalone viewing) or 'galaxy' "
+             "(system fonts + Galaxy palette, no external assets, for embedding in Galaxy).")
+    report_parser.add_argument(
+        "--matrix", default=None,
+        help="Optional distance matrix CSV/TSV for the tree-ordered heatmap (needs the 'report' "
+             "extra: pip install 'pyeuk[report]'; omitted gracefully if absent).")
 
     # Commands 6-8: amplicon front end (BAMs -> haplotype sheet)
     # Each forwards straight to the module's own parser rather than restating its flags here.
@@ -271,6 +302,9 @@ def main():
         )
         if args.single_k:
             # Legacy single-partition behaviour, opt-in.
+            if args.report:
+                print("[Report] --report is only available for the sweep diagnostic; ignoring "
+                      "it under --single-k.", file=sys.stderr)
             finder.find_clusters(
                 matrix_df,
                 args.gold_clusters,
@@ -285,7 +319,7 @@ def main():
         else:
             # Default: the sweep diagnostic -- a count range, its confidence, and the
             # confidence tree. Also writes a representative partition for downstream tools.
-            finder.cluster_sweep(
+            sweep_result = finder.cluster_sweep(
                 matrix_df,
                 k_min=args.k_min,
                 k_max=args.k_max,
@@ -293,6 +327,30 @@ def main():
                 linkage_method=args.linkage_method,
                 output_dir=args.output_dir,
             )
+            if args.report:
+                import datetime
+                from .report import render
+                out_html = os.path.join(
+                    args.output_dir,
+                    f"{datetime.date.today().strftime('%Y-%m-%d')}_REPORT.html")
+                html = render(sweep_result, dist_df=matrix_df,
+                              flavor=args.report_flavor, theme=args.report_theme)
+                with open(out_html, "w") as fh:
+                    fh.write(html)
+                print(f"[Report] Wrote {out_html} ({args.report_flavor}/{args.report_theme}).")
+
+    elif args.command == "report":
+        import json
+        from .report import render
+        if not os.path.exists(args.sweep_json):
+            print(f"[Error] SWEEP.json not found: {args.sweep_json}", file=sys.stderr)
+            sys.exit(1)
+        with open(args.sweep_json) as fh:
+            sweep = json.load(fh)
+        html = render(sweep, dist_df=args.matrix, flavor=args.flavor, theme=args.theme)
+        with open(args.output, "w") as fh:
+            fh.write(html)
+        print(f"[Report] Wrote {args.output} ({args.flavor}/{args.theme}).")
 
     elif args.command in ("define-windows", "call-haplotypes", "build-sheet"):
         # argparse has already consumed the subcommand; hand the remainder to the module.
