@@ -135,6 +135,16 @@ def main():
         help="Dissimilarity at which to cut in --cut distance mode. Omit to calibrate it from "
              "labelled pairs when --gold-clusters is given, or from the distance distribution "
              "otherwise; the provenance of the value is printed either way.")
+    cluster_parser.add_argument(
+        "--single-k", action="store_true", default=False,
+        help="Report one cluster count instead of the default sweep diagnostic. The sweep "
+             "reports the range of counts the data supports, how confident that is, and a "
+             "per-branch confidence tree; a single k is only trustworthy when the count "
+             "selectors agree, which the sweep tells you. Use this only when a downstream step "
+             "strictly needs the legacy single-partition behaviour.")
+    cluster_parser.add_argument(
+        "--n-boot", type=int, default=200,
+        help="Bootstrap resamples for branch support and stability in the sweep (default: 200).")
 
     # Commands 6-8: amplicon front end (BAMs -> haplotype sheet)
     # Each forwards straight to the module's own parser rather than restating its flags here.
@@ -259,17 +269,30 @@ def main():
             robust=args.robust,
             relative_gap_floor=args.relative_gap_floor
         )
-        finder.find_clusters(
-            matrix_df,
-            args.gold_clusters,
-            k_min=args.k_min,
-            k_max=args.k_max,
-            relative_gap_floor=args.relative_gap_floor,
-            output_dir=args.output_dir,
-            cut_mode=args.cut,
-            linkage_threshold=args.linkage_threshold,
-            linkage_method=args.linkage_method
-        )
+        if args.single_k:
+            # Legacy single-partition behaviour, opt-in.
+            finder.find_clusters(
+                matrix_df,
+                args.gold_clusters,
+                k_min=args.k_min,
+                k_max=args.k_max,
+                relative_gap_floor=args.relative_gap_floor,
+                output_dir=args.output_dir,
+                cut_mode=args.cut,
+                linkage_threshold=args.linkage_threshold,
+                linkage_method=args.linkage_method
+            )
+        else:
+            # Default: the sweep diagnostic -- a count range, its confidence, and the
+            # confidence tree. Also writes a representative partition for downstream tools.
+            finder.cluster_sweep(
+                matrix_df,
+                k_min=args.k_min,
+                k_max=args.k_max,
+                n_boot=args.n_boot,
+                linkage_method=args.linkage_method,
+                output_dir=args.output_dir,
+            )
 
     elif args.command in ("define-windows", "call-haplotypes", "build-sheet"):
         # argparse has already consumed the subcommand; hand the remainder to the module.
